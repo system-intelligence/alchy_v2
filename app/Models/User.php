@@ -6,11 +6,14 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
-class User extends Authenticatable
+class User extends Authenticatable implements HasMedia
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable;
+    use HasFactory, Notifiable, InteractsWithMedia;
 
     /**
      * The attributes that are mass assignable.
@@ -22,6 +25,7 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
+        'last_seen',
     ];
 
     /**
@@ -44,6 +48,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'last_seen' => 'datetime',
         ];
     }
 
@@ -75,5 +80,33 @@ class User extends Authenticatable
         }
         // Users have view/edit based on some logic, but for simplicity, assume view only unless specified
         return false; // Placeholder
+    }
+
+
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('avatar')
+            ->singleFile()
+            ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+    }
+
+    public function updateLastSeen()
+    {
+        $this->update(['last_seen' => now()]);
+    }
+
+    public function isOnline()
+    {
+        return $this->last_seen && $this->last_seen->diffInMinutes(now()) < 5;
+    }
+
+    public function getStatusAttribute()
+    {
+        return $this->isOnline() ? 'online' : 'offline';
+    }
+
+    public function getAvatarUrlAttribute()
+    {
+        return $this->getFirstMediaUrl('avatar') ?: 'https://ui-avatars.com/api/?name=' . urlencode($this->name) . '&color=7F9CF5&background=EBF4FF';
     }
 }

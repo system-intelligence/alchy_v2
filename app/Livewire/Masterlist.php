@@ -12,11 +12,15 @@ class Masterlist extends Component
     public $showModal = false;
     public $editing = false;
     public $inventoryId;
-    public $brand, $description, $category, $quantity, $status;
+    public $brand, $description, $category, $quantity, $min_stock_level;
 
     // Filters
     public $search = '';
     public $statusFilter = '';
+
+    // Bulk operations
+    public $selectAll = false;
+    public $selectedItems = [];
 
     public function mount()
     {
@@ -60,7 +64,7 @@ class Masterlist extends Component
             $this->description = $inventory->description;
             $this->category = $inventory->category;
             $this->quantity = $inventory->quantity;
-            $this->status = $inventory->status;
+            $this->min_stock_level = $inventory->min_stock_level;
         }
         $this->showModal = true;
     }
@@ -79,7 +83,7 @@ class Masterlist extends Component
         $this->description = '';
         $this->category = '';
         $this->quantity = 0;
-        $this->status = 'normal';
+        $this->min_stock_level = 5;
     }
 
     public function save()
@@ -91,10 +95,13 @@ class Masterlist extends Component
             'description' => 'required|string',
             'category' => 'required|string|max:255',
             'quantity' => 'required|integer|min:0',
-            'status' => 'required|in:normal,critical,out_of_stock',
+            'min_stock_level' => 'required|integer|min:0',
         ]);
 
         $wasEditing = $this->editing;
+
+        // Auto-set status based on quantity and min_stock_level
+        $status = $this->quantity <= 0 ? 'out_of_stock' : ($this->quantity <= $this->min_stock_level ? 'critical' : 'normal');
 
         if ($this->editing) {
             $inventory = Inventory::find($this->inventoryId);
@@ -107,7 +114,8 @@ class Masterlist extends Component
                 'description' => $this->description,
                 'category' => $this->category,
                 'quantity' => $this->quantity,
-                'status' => $this->status,
+                'min_stock_level' => $this->min_stock_level,
+                'status' => $status,
             ]);
             History::create([
                 'user_id' => auth()->id(),
@@ -118,7 +126,8 @@ class Masterlist extends Component
                     'brand' => $this->brand,
                     'category' => $this->category,
                     'quantity' => $this->quantity,
-                    'status' => $this->status
+                    'min_stock_level' => $this->min_stock_level,
+                    'status' => $status
                 ],
             ]);
         } else {
@@ -127,7 +136,8 @@ class Masterlist extends Component
                 'description' => $this->description,
                 'category' => $this->category,
                 'quantity' => $this->quantity,
-                'status' => $this->status,
+                'min_stock_level' => $this->min_stock_level,
+                'status' => $status,
             ]);
             History::create([
                 'user_id' => auth()->id(),
@@ -138,7 +148,8 @@ class Masterlist extends Component
                     'brand' => $this->brand,
                     'category' => $this->category,
                     'quantity' => $this->quantity,
-                    'status' => $this->status
+                    'min_stock_level' => $this->min_stock_level,
+                    'status' => $status
                 ],
             ]);
         }
@@ -172,11 +183,61 @@ class Masterlist extends Component
     public function updatedSearch()
     {
         $this->loadInventories();
+        $this->resetSelection();
     }
 
-    public function updatedStatusFilter()
+    public function filterByStatus($status)
     {
+        $this->statusFilter = $status;
         $this->loadInventories();
+        $this->resetSelection();
+    }
+
+    public function updatedSelectAll($value)
+    {
+        if ($value) {
+            $this->selectedItems = $this->inventories->pluck('id')->toArray();
+        } else {
+            $this->selectedItems = [];
+        }
+    }
+
+    public function updatedSelectedItems()
+    {
+        $this->selectAll = count($this->selectedItems) === $this->inventories->count();
+    }
+
+    public function bulkDelete()
+    {
+        $this->ensureAdmin();
+
+        if (empty($this->selectedItems)) {
+            session()->flash('message', 'No items selected for deletion.');
+            return;
+        }
+
+        $inventories = Inventory::whereIn('id', $this->selectedItems)->get();
+
+        foreach ($inventories as $inventory) {
+            History::create([
+                'user_id' => auth()->id(),
+                'action' => 'delete',
+                'model' => 'inventory',
+                'model_id' => $inventory->id,
+                'changes' => ['deleted' => true, 'bulk_delete' => true],
+            ]);
+            $inventory->delete();
+        }
+
+        $this->loadInventories();
+        $this->resetSelection();
+        session()->flash('message', count($this->selectedItems) . ' items deleted successfully.');
+    }
+
+    protected function resetSelection()
+    {
+        $this->selectAll = false;
+        $this->selectedItems = [];
     }
 
     protected function ensureAdmin(): void

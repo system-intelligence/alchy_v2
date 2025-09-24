@@ -12,20 +12,24 @@ class SpecialUsersSeeder extends Seeder
      */
     public function run(): void
     {
-        \App\Models\User::create([
-            'name' => 'Developer',
-            'email' => 'developer@example.com',
-            'password' => bcrypt('password'),
-            'role' => 'developer',
-            'email_verified_at' => now(),
-        ]);
-
-        \App\Models\User::create([
-            'name' => 'System Admin',
-            'email' => 'admin@example.com',
-            'password' => bcrypt('password'),
-            'role' => 'system_admin',
-            'email_verified_at' => now(),
-        ]);
+        \App\Models\User::updateOrCreate(
+            ['email' => 'developer@example.com'],
+            [
+                'name' => 'Developer',
+                'password' => bcrypt('password'),
+                'role' => 'developer',
+                'email_verified_at' => now(),
+            ]
+        );
+        
+        \App\Models\User::updateOrCreate(
+            ['email' => 'admin@example.com'],
+            [
+                'name' => 'System Admin',
+                'password' => bcrypt('password'),
+                'role' => 'system_admin',
+                'email_verified_at' => now(),
+            ]
+        );
     }
 }

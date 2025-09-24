@@ -18,14 +18,18 @@ class DatabaseSeeder extends Seeder
     {
         // User::factory(10)->create();
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-            'role' => 'user',
-        ]);
-
+        \App\Models\User::updateOrCreate(
+            ['email' => 'test@example.com'],
+            [
+                'name' => 'Test User',
+                'role' => 'user',
+                'password' => bcrypt('password'),
+                'email_verified_at' => now(),
+            ]
+        );
+        
         $this->call(SpecialUsersSeeder::class);
-
+        
         // Seed sample data
         $this->seedSampleData();
     }
@@ -46,13 +50,13 @@ class DatabaseSeeder extends Seeder
 
         // Create sample inventory
         $inventories = [
-            ['brand' => 'Staples', 'description' => 'Standard stapler clips', 'category' => 'Office Supplies', 'quantity' => 100, 'status' => 'normal'],
-            ['brand' => 'HP', 'description' => 'Inkjet printer cartridge', 'category' => 'Printer Supplies', 'quantity' => 50, 'status' => 'normal'],
-            ['brand' => 'Post-It', 'description' => 'Sticky notes 3x3', 'category' => 'Office Supplies', 'quantity' => 200, 'status' => 'normal'],
-            ['brand' => 'Dixon', 'description' => 'Ticonderoga pencils', 'category' => 'Writing Instruments', 'quantity' => 150, 'status' => 'normal'],
-            ['brand' => 'Avery', 'description' => 'White labels 1x2.5', 'category' => 'Labels', 'quantity' => 75, 'status' => 'normal'],
-            ['brand' => 'Brother', 'description' => 'Thermal transfer tape', 'category' => 'Printer Supplies', 'quantity' => 25, 'status' => 'critical'],
-            ['brand' => 'Pilot', 'description' => 'G2 gel pens', 'category' => 'Writing Instruments', 'quantity' => 0, 'status' => 'out_of_stock'],
+            ['brand' => 'Staples', 'description' => 'Standard stapler clips', 'category' => 'Office Supplies', 'quantity' => 100, 'min_stock_level' => 10, 'status' => 'normal'],
+            ['brand' => 'HP', 'description' => 'Inkjet printer cartridge', 'category' => 'Printer Supplies', 'quantity' => 50, 'min_stock_level' => 5, 'status' => 'normal'],
+            ['brand' => 'Post-It', 'description' => 'Sticky notes 3x3', 'category' => 'Office Supplies', 'quantity' => 200, 'min_stock_level' => 20, 'status' => 'normal'],
+            ['brand' => 'Dixon', 'description' => 'Ticonderoga pencils', 'category' => 'Writing Instruments', 'quantity' => 150, 'min_stock_level' => 15, 'status' => 'normal'],
+            ['brand' => 'Avery', 'description' => 'White labels 1x2.5', 'category' => 'Labels', 'quantity' => 75, 'min_stock_level' => 10, 'status' => 'normal'],
+            ['brand' => 'Brother', 'description' => 'Thermal transfer tape', 'category' => 'Printer Supplies', 'quantity' => 25, 'min_stock_level' => 5, 'status' => 'critical'],
+            ['brand' => 'Pilot', 'description' => 'G2 gel pens', 'category' => 'Writing Instruments', 'quantity' => 0, 'min_stock_level' => 5, 'status' => 'out_of_stock'],
         ];
 
         foreach ($inventories as $inventoryData) {

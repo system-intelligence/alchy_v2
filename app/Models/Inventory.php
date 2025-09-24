@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Inventory extends Model
 {
-    protected $fillable = ['brand', 'description', 'category', 'quantity', 'status'];
+    protected $fillable = ['brand', 'description', 'category', 'quantity', 'status', 'min_stock_level'];
 
     public function expenses()
     {

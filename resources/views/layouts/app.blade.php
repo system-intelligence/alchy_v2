@@ -80,9 +80,13 @@
                     </div>
                     <div class="flex items-center space-x-4">
                         <div class="flex items-center space-x-2">
-                            <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                                <span class="text-white text-sm font-medium">{{ strtoupper(substr(auth()->user()->name, 0, 1)) }}</span>
-                            </div>
+                            @if(auth()->user()->avatar_url && !str_contains(auth()->user()->avatar_url, 'ui-avatars.com'))
+                                <img src="{{ auth()->user()->avatar_url }}" alt="Avatar" class="w-8 h-8 rounded-full object-cover">
+                            @else
+                                <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                                    <span class="text-white text-sm font-medium">{{ strtoupper(substr(auth()->user()->name, 0, 1)) }}</span>
+                                </div>
+                            @endif
                             <div class="hidden md:block">
                                 <p class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ auth()->user()->name }}</p>
                                 <p class="text-xs text-gray-500 dark:text-gray-400 capitalize">{{ str_replace('_', ' ', auth()->user()->role) }}</p>
