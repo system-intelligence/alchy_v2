@@ -17,8 +17,10 @@ class Expenses extends Component
     public $selectedClient = null;
     public $clientExpenses = [];
 
-    // Create Release (Expense) modal state
-    public $showModal = false;
+    // Edit expense
+    public $editingExpenseId = null;
+    public $editCostPerUnit = 0;
+
 
     // Client Management modal state
     public $showClientModal = false;
@@ -27,20 +29,20 @@ class Expenses extends Component
     public $clientName = '';
     public $clientBranch = '';
     public $clientLogo = null;
+    public $startDate = '';
+    public $endDate = '';
+    public $jobType = '';
 
-    // Create form fields
-    public $client_id = null;
-    public $inventory_id = null;
-    public $quantity_used = 1;
-    public $cost_per_unit = 0;
+    // Client Deletion modal
+    public $showDeleteClientModal = false;
+    public $deleteClientId = null;
+    public $deletePassword = '';
 
-    // Options
-    public $inventoryOptions = [];
+
 
     public function mount()
     {
         $this->loadClients();
-        $this->inventoryOptions = Inventory::orderBy('brand')->orderBy('description')->get();
     }
 
     public function loadClients()
@@ -54,21 +56,118 @@ class Expenses extends Component
         $this->clientExpenses = Expense::where('client_id', $clientId)->with('inventory')->latest()->get();
     }
 
-    public function openCreateModal()
-    {
-        $this->ensureAdmin();
-        $this->resetCreateForm();
-        $this->showModal = true;
-    }
 
     public function closeModal()
     {
         // Close all modals
         $this->selectedClient = null;
         $this->clientExpenses = [];
-        $this->showModal = false;
         $this->showClientModal = false;
+        $this->showDeleteClientModal = false;
         $this->resetClientForm();
+        $this->resetDeleteForm();
+        $this->cancelEditExpense();
+    }
+
+    public function openDeleteClientModal($clientId)
+    {
+        $this->ensureAdmin();
+        $this->deleteClientId = $clientId;
+        $this->showDeleteClientModal = true;
+    }
+
+    public function confirmDeleteClient()
+    {
+        $this->ensureAdmin();
+
+        $this->validate([
+            'deletePassword' => 'required',
+        ]);
+
+        // Check password
+        if (!\Illuminate\Support\Facades\Hash::check($this->deletePassword, auth()->user()->password)) {
+            $this->addError('deletePassword', 'The password is incorrect.');
+            return;
+        }
+
+        $client = Client::find($this->deleteClientId);
+        if (!$client) {
+            session()->flash('message', 'Client not found.');
+            return;
+        }
+
+        $client->delete();
+        History::create([
+            'user_id' => auth()->id(),
+            'action' => 'delete',
+            'model' => 'client',
+            'model_id' => $this->deleteClientId,
+            'changes' => ['deleted' => true],
+        ]);
+
+        $this->loadClients();
+        $this->closeModal();
+        session()->flash('message', 'Client deleted successfully.');
+    }
+
+    protected function resetDeleteForm(): void
+    {
+        $this->deleteClientId = null;
+        $this->deletePassword = '';
+    }
+
+
+    public function editExpense($expenseId)
+    {
+        $expense = Expense::find($expenseId);
+        if ($expense) {
+            $this->editingExpenseId = $expenseId;
+            $this->editCostPerUnit = $expense->cost_per_unit;
+        }
+    }
+
+    public function saveEditExpense()
+    {
+        $this->ensureAdmin();
+
+        $this->validate([
+            'editCostPerUnit' => 'required|numeric|min:0',
+        ]);
+
+        $expense = Expense::find($this->editingExpenseId);
+        if (!$expense) {
+            session()->flash('message', 'Expense not found.');
+            return;
+        }
+
+        $oldCost = $expense->cost_per_unit;
+        $expense->cost_per_unit = $this->editCostPerUnit;
+        $expense->total_cost = round($expense->quantity_used * $this->editCostPerUnit, 2);
+        $expense->save();
+
+        History::create([
+            'user_id' => auth()->id(),
+            'action' => 'update',
+            'model' => 'expense',
+            'model_id' => $expense->id,
+            'changes' => [
+                'cost_per_unit' => $this->editCostPerUnit,
+                'total_cost' => $expense->total_cost,
+            ],
+        ]);
+
+        $this->loadClients();
+        if ($this->selectedClient) {
+            $this->viewExpenses($this->selectedClient->id);
+        }
+        $this->cancelEditExpense();
+        session()->flash('message', 'Expense updated successfully.');
+    }
+
+    public function cancelEditExpense()
+    {
+        $this->editingExpenseId = null;
+        $this->editCostPerUnit = 0;
     }
 
     public function openClientModal($clientId = null)
@@ -86,6 +185,9 @@ class Expenses extends Component
             $this->clientId = $clientId;
             $this->clientName = $client->name;
             $this->clientBranch = $client->branch;
+            $this->startDate = $client->start_date ? $client->start_date->format('Y-m-d') : '';
+            $this->endDate = $client->end_date ? $client->end_date->format('Y-m-d') : '';
+            $this->jobType = $client->job_type;
         }
 
         $this->showClientModal = true;
@@ -98,6 +200,9 @@ class Expenses extends Component
         $this->clientName = '';
         $this->clientBranch = '';
         $this->clientLogo = null;
+        $this->startDate = '';
+        $this->endDate = '';
+        $this->jobType = '';
     }
 
     public function saveClient()
@@ -107,6 +212,9 @@ class Expenses extends Component
         $this->validate([
             'clientName' => 'required|string|max:255',
             'clientBranch' => 'required|string|max:255',
+            'startDate' => 'nullable|date',
+            'endDate' => 'nullable|date|after_or_equal:startDate',
+            'jobType' => 'nullable|in:service,installation',
             'clientLogo' => 'nullable|image|max:2048', // 2MB max
         ]);
 
@@ -116,9 +224,14 @@ class Expenses extends Component
                 session()->flash('message', 'Client not found.');
                 return;
             }
+            $status = $this->endDate ? 'settled' : 'in_progress';
             $client->update([
                 'name' => $this->clientName,
                 'branch' => $this->clientBranch,
+                'start_date' => $this->startDate,
+                'end_date' => $this->endDate,
+                'job_type' => $this->jobType,
+                'status' => $status,
             ]);
 
             // Handle logo upload
@@ -137,14 +250,23 @@ class Expenses extends Component
                 'changes' => [
                     'name' => $this->clientName,
                     'branch' => $this->clientBranch,
+                    'start_date' => $this->startDate,
+                    'end_date' => $this->endDate,
+                    'job_type' => $this->jobType,
+                    'status' => $status,
                     'logo_updated' => $this->clientLogo ? true : false,
                 ],
             ]);
             $message = 'Client updated successfully.';
         } else {
+            $status = $this->endDate ? 'settled' : 'in_progress';
             $client = Client::create([
                 'name' => $this->clientName,
                 'branch' => $this->clientBranch,
+                'start_date' => $this->startDate,
+                'end_date' => $this->endDate,
+                'job_type' => $this->jobType,
+                'status' => $status,
             ]);
 
             // Handle logo upload for new client
@@ -163,6 +285,10 @@ class Expenses extends Component
                 'changes' => [
                     'name' => $this->clientName,
                     'branch' => $this->clientBranch,
+                    'start_date' => $this->startDate,
+                    'end_date' => $this->endDate,
+                    'job_type' => $this->jobType,
+                    'status' => $status,
                     'logo_uploaded' => $this->clientLogo ? true : false,
                 ],
             ]);
@@ -184,12 +310,6 @@ class Expenses extends Component
             return;
         }
 
-        // Check if client has expenses
-        if ($client->expenses()->count() > 0) {
-            session()->flash('message', 'Cannot delete client with existing expenses.');
-            return;
-        }
-
         $client->delete();
         History::create([
             'user_id' => auth()->id(),
@@ -203,93 +323,7 @@ class Expenses extends Component
         session()->flash('message', 'Client deleted successfully.');
     }
 
-    protected function resetCreateForm(): void
-    {
-        $this->client_id = null;
-        $this->inventory_id = null;
-        $this->quantity_used = 1;
-        $this->cost_per_unit = 0;
-    }
 
-    public function save()
-    {
-        $this->ensureAdmin();
-
-        $this->validate([
-            'client_id' => 'required|exists:clients,id',
-            'inventory_id' => 'required|exists:inventories,id',
-            'quantity_used' => 'required|integer|min:1',
-            'cost_per_unit' => 'required|numeric|min:0',
-        ]);
-
-        $inventory = Inventory::find($this->inventory_id);
-        if (!$inventory) {
-            session()->flash('message', 'Selected inventory not found.');
-            return;
-        }
-
-        if ($this->quantity_used > $inventory->quantity) {
-            $this->addError('quantity_used', 'Quantity exceeds available stock ('.$inventory->quantity.').');
-            return;
-        }
-
-        $total = round($this->quantity_used * (float)$this->cost_per_unit, 2);
-
-        $expense = Expense::create([
-            'client_id' => $this->client_id,
-            'inventory_id' => $this->inventory_id,
-            'quantity_used' => $this->quantity_used,
-            'cost_per_unit' => $this->cost_per_unit,
-            'total_cost' => $total,
-            'released_at' => now(),
-        ]);
-
-        // Update inventory stock and status
-        $inventory->quantity = $inventory->quantity - $this->quantity_used;
-        if ($inventory->quantity <= 0) {
-            $inventory->quantity = 0;
-            $inventory->status = 'out_of_stock';
-        } elseif ($inventory->quantity <= $inventory->min_stock_level) {
-            $inventory->status = 'critical';
-        } else {
-            $inventory->status = 'normal';
-        }
-        $inventory->save();
-
-        // Log history for expense and inventory
-        History::create([
-            'user_id' => auth()->id(),
-            'action' => 'create',
-            'model' => 'expense',
-            'model_id' => $expense->id,
-            'changes' => [
-                'client_id' => $expense->client_id,
-                'inventory_id' => $expense->inventory_id,
-                'quantity_used' => $expense->quantity_used,
-                'total_cost' => $expense->total_cost,
-            ],
-        ]);
-
-        History::create([
-            'user_id' => auth()->id(),
-            'action' => 'update',
-            'model' => 'inventory',
-            'model_id' => $inventory->id,
-            'changes' => [
-                'quantity' => $inventory->quantity,
-                'status' => $inventory->status,
-            ],
-        ]);
-
-        // Refresh lists
-        $this->loadClients();
-        if ($this->selectedClient && $this->selectedClient->id === (int)$this->client_id) {
-            $this->viewExpenses($this->client_id);
-        }
-
-        $this->closeModal();
-        session()->flash('message', 'Release recorded and inventory updated.');
-    }
 
     protected function ensureAdmin(): void
     {

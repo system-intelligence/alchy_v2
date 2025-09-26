@@ -11,7 +11,15 @@ class Client extends Model implements HasMedia
 {
     use InteractsWithMedia;
 
-    protected $fillable = ['name', 'branch'];
+    protected $fillable = ['name', 'branch', 'start_date', 'end_date', 'job_type', 'status'];
+
+    protected function casts(): array
+    {
+        return [
+            'start_date' => 'date',
+            'end_date' => 'date',
+        ];
+    }
 
     public function expenses()
     {

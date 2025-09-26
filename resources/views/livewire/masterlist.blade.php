@@ -4,13 +4,23 @@
             <h1 class="text-2xl font-bold">Masterlist</h1>
         </div>
         <div class="flex-1 md:max-w-2xl">
-            <div class="flex gap-3">
-                <input
-                    type="text"
-                    wire:model.debounce.400ms="search"
-                    placeholder="Search brand, description, category..."
-                    class="w-full shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                />
+            <div class="flex flex-col sm:flex-row gap-3">
+                <div class="flex flex-1 gap-2">
+                    <input
+                        type="text"
+                        wire:model.debounce.400ms="search"
+                        wire:keydown.enter="performSearch"
+                        placeholder="Search brand, description, location..."
+                        class="flex-1 shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    />
+                    <button
+                        wire:click="performSearch"
+                        class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded flex items-center gap-2 shadow-md border-2 border-blue-500 whitespace-nowrap"
+                    >
+                        <x-heroicon-o-magnifying-glass class="w-4 h-4" />
+                        <span class="hidden sm:inline">Search</span>
+                    </button>
+                </div>
                 <select
                     wire:change="filterByStatus($event.target.value)"
                     class="shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline"
@@ -32,6 +42,10 @@
                 Delete Selected ({{ count($selectedItems) }})
             </button>
             @endif
+            <button wire:click="openReleaseModal" class="{{ $clients->count() > 0 ? 'bg-red-500 hover:bg-red-600 cursor-pointer' : 'bg-red-400 cursor-not-allowed opacity-60' }} text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 shadow-md border-2 border-red-500" {{ $clients->count() === 0 ? 'disabled' : '' }}>
+                <x-heroicon-o-plus class="w-4 h-4" />
+                Record Release
+            </button>
             <button wire:click="openModal" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded flex items-center gap-2">
                 <x-heroicon-o-plus class="w-4 h-4" />
                 Add Inventory
@@ -59,7 +73,7 @@
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">No.</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Brand</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Description</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Category</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Location</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Quantity</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
                         @if(auth()->user()->isSystemAdmin())
@@ -121,6 +135,115 @@
         </div>
     </div>
 
+    <!-- Record Release Modal -->
+    @if($showReleaseModal)
+        <div class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" id="release-modal">
+            <div class="relative top-10 mx-auto p-5 border w-11/12 max-w-5xl shadow-lg rounded-md bg-white dark:bg-gray-800">
+                <div class="mt-3">
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Record Release</h3>
+                    <form wire:submit.prevent="saveRelease" class="space-y-6">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Client</label>
+                            <select wire:model="client_id" class="w-full shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none focus:shadow-outline">
+                                <option value="">Select client...</option>
+                                @foreach($clients as $client)
+                                    <option value="{{ $client->id }}">{{ $client->name }} — {{ $client->branch }}</option>
+                                @endforeach
+                            </select>
+                            @error('client_id') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                        </div>
+
+                        <!-- Add Material Section -->
+                        <div class="border-t pt-4">
+                            <h4 class="text-md font-medium text-gray-900 dark:text-white mb-3">Add Materials</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Material</label>
+                                    <select wire:model="selectedInventoryId" class="w-full shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none focus:shadow-outline">
+                                        <option value="">Select material...</option>
+                                        @foreach($inventoryOptions as $item)
+                                            <option value="{{ $item->id }}">{{ $item->brand }} — {{ \Illuminate\Support\Str::limit($item->description, 30) }} (Stock: {{ $item->quantity }})</option>
+                                        @endforeach
+                                    </select>
+                                    @error('selectedInventoryId') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                                </div>
+                                <div>
+                                    <button type="button" wire:click="addReleaseItem" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded flex items-center gap-2">
+                                        <x-heroicon-o-plus class="w-4 h-4" />
+                                        Add Material
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Selected Materials Table -->
+                        @if(count($releaseItems) > 0)
+                        <div class="border-t pt-4">
+                            <h4 class="text-md font-medium text-gray-900 dark:text-white mb-3">Selected Materials</h4>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                    <thead class="bg-gray-50 dark:bg-gray-700">
+                                        <tr>
+                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Material</th>
+                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Quantity</th>
+                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Cost per Unit</th>
+                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Total</th>
+                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                                        @foreach($releaseItems as $index => $item)
+                                        <tr>
+                                            <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">{{ $item['inventory']->brand }} - {{ $item['inventory']->description }}</td>
+                                            <td class="px-4 py-2">
+                                                <input type="number" min="1" wire:model="releaseItems.{{ $index }}.quantity_used" class="w-20 shadow appearance-none border rounded py-1 px-2 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none" />
+                                            </td>
+                                            <td class="px-4 py-2">
+                                                <input type="number" min="0" step="0.01" wire:model="releaseItems.{{ $index }}.cost_per_unit" class="w-24 shadow appearance-none border rounded py-1 px-2 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none" />
+                                            </td>
+                                            <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">
+                                                ₱{{ number_format(($item['quantity_used'] ?? 0) * ($item['cost_per_unit'] ?? 0), 2) }}
+                                            </td>
+                                            <td class="px-4 py-2">
+                                                <button type="button" wire:click="removeReleaseItem({{ $index }})" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">
+                                                    <x-heroicon-o-trash class="w-4 h-4" />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                            @error('releaseItems') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                        </div>
+                        @endif
+
+                        <div class="flex items-center justify-between border-t pt-4">
+                            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded">Save Release</button>
+                            <button type="button" wire:click="closeModal" class="bg-gray-500 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    <!-- Duplicate Material Modal -->
+    @if($showDuplicateModal)
+        <div class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
+                <div class="text-center">
+                    <x-heroicon-o-exclamation-triangle class="w-12 h-12 text-yellow-500 mx-auto mb-4" />
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Duplicate Material</h3>
+                    <p class="text-gray-600 dark:text-gray-400 mb-6">{{ $duplicateMessage }}</p>
+                    <button wire:click="closeDuplicateModal" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded">
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
     <!-- Modal -->
     @if($showModal)
         <div class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" id="my-modal">
@@ -139,8 +262,12 @@
                             @error('description') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                         </div>
                         <div class="mb-4">
-                            <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="category">Category</label>
-                            <input wire:model="category" type="text" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="category">
+                            <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="category">Location</label>
+                            <select wire:model="category" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="category">
+                                <option value="">Select location...</option>
+                                <option value="Bodega Room">Bodega Room</option>
+                                <option value="Alchy Room">Alchy Room</option>
+                            </select>
                             @error('category') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                         </div>
                         <div class="mb-4">

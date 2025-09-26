@@ -73,11 +73,13 @@
         </div>
     </div>
 
+    @if(auth()->user()->isDeveloper())
     <!-- Delete Account -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
         <div class="max-w-xl">
             @include('profile.partials.delete-user-form')
         </div>
     </div>
+    @endif
 </div>
 @endsection

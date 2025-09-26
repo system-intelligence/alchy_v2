@@ -15,6 +15,11 @@
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                         {{ __('Dashboard') }}
                     </x-nav-link>
+                    @if(auth()->user()->isDeveloper())
+                    <x-nav-link :href="route('developer.user-management')" :active="request()->routeIs('developer.user-management')">
+                        {{ __('User Management') }}
+                    </x-nav-link>
+                    @endif
                 </div>
             </div>
 
@@ -70,6 +75,11 @@
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                 {{ __('Dashboard') }}
             </x-responsive-nav-link>
+            @if(auth()->user()->isDeveloper())
+            <x-responsive-nav-link :href="route('developer.user-management')" :active="request()->routeIs('developer.user-management')">
+                {{ __('User Management') }}
+            </x-responsive-nav-link>
+            @endif
         </div>
 
         <!-- Responsive Settings Options -->

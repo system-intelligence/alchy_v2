@@ -30,6 +30,10 @@ Route::get('/expenses', function () {
     return view('expenses');
 })->middleware(['auth'])->name('expenses');
 
+Route::get('/developer/user-management', function () {
+    return view('developer.user-management');
+})->middleware(['auth'])->name('developer.user-management');
+
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

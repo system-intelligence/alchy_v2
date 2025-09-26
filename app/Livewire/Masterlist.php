@@ -5,6 +5,8 @@ namespace App\Livewire;
 use Livewire\Component;
 use App\Models\Inventory;
 use App\Models\History;
+use App\Models\Client;
+use App\Models\Expense;
 
 class Masterlist extends Component
 {
@@ -22,9 +24,21 @@ class Masterlist extends Component
     public $selectAll = false;
     public $selectedItems = [];
 
+    // Record Release modal
+    public $showReleaseModal = false;
+    public $showDuplicateModal = false;
+    public $duplicateMessage = '';
+    public $clients;
+    public $inventoryOptions = [];
+    public $client_id = null;
+    public $releaseItems = [];
+    public $selectedInventoryId = null;
+
     public function mount()
     {
         $this->loadInventories();
+        $this->clients = Client::with('expenses')->get();
+        $this->inventoryOptions = Inventory::orderBy('brand')->orderBy('description')->get();
     }
 
     public function loadInventories()
@@ -72,7 +86,71 @@ class Masterlist extends Component
     public function closeModal()
     {
         $this->showModal = false;
+        $this->showReleaseModal = false;
+        $this->showDuplicateModal = false;
         $this->resetForm();
+        $this->resetReleaseForm();
+    }
+
+    public function closeDuplicateModal()
+    {
+        $this->showDuplicateModal = false;
+        $this->duplicateMessage = '';
+    }
+
+    public function openReleaseModal()
+    {
+        $this->ensureAdmin();
+        $this->resetReleaseForm();
+        $this->showReleaseModal = true;
+    }
+
+    public function addReleaseItem()
+    {
+        $this->validate([
+            'selectedInventoryId' => 'required|exists:inventories,id',
+        ]);
+
+        $inventory = Inventory::find($this->selectedInventoryId);
+        if (!$inventory) {
+            session()->flash('message', 'Selected inventory not found.');
+            return;
+        }
+
+        // Check if already added
+        if (collect($this->releaseItems)->pluck('inventory_id')->contains($this->selectedInventoryId)) {
+            $this->showDuplicateModal = true;
+            $this->duplicateMessage = 'Oops, you already selected the same material. You may just edit the details for an update.';
+            return;
+        }
+
+        $this->releaseItems[] = [
+            'inventory_id' => $this->selectedInventoryId,
+            'quantity_used' => 1,
+            'cost_per_unit' => 0,
+            'inventory' => $inventory,
+        ];
+
+        $this->selectedInventoryId = null;
+    }
+
+    public function removeReleaseItem($index)
+    {
+        unset($this->releaseItems[$index]);
+        $this->releaseItems = array_values($this->releaseItems);
+    }
+
+    public function updatedReleaseItems($value, $key)
+    {
+        // Handle updates to nested array
+        $parts = explode('.', $key);
+        if (count($parts) === 2) {
+            $index = $parts[0];
+            $field = $parts[1];
+            if (isset($this->releaseItems[$index])) {
+                $this->releaseItems[$index][$field] = $value;
+            }
+        }
     }
 
     public function resetForm()
@@ -84,6 +162,109 @@ class Masterlist extends Component
         $this->category = '';
         $this->quantity = 0;
         $this->min_stock_level = 5;
+    }
+
+    public function resetReleaseForm()
+    {
+        $this->client_id = null;
+        $this->releaseItems = [];
+        $this->selectedInventoryId = null;
+    }
+
+    public function saveRelease()
+    {
+        $this->ensureAdmin();
+
+        $this->validate([
+            'client_id' => 'required|exists:clients,id',
+            'releaseItems' => 'required|array|min:1',
+            'releaseItems.*.inventory_id' => 'required|exists:inventories,id',
+            'releaseItems.*.quantity_used' => 'required|integer|min:1',
+            'releaseItems.*.cost_per_unit' => 'required|numeric|min:0',
+        ]);
+
+        $client = Client::find($this->client_id);
+        if (!$client) {
+            session()->flash('message', 'Selected client not found.');
+            return;
+        }
+
+        $createdExpenses = [];
+        $updatedInventories = [];
+
+        foreach ($this->releaseItems as $item) {
+            $inventory = Inventory::find($item['inventory_id']);
+            if (!$inventory) {
+                session()->flash('message', 'One of the selected inventories not found.');
+                return;
+            }
+
+            if ($item['quantity_used'] > $inventory->quantity) {
+                $this->addError('releaseItems', 'Quantity for ' . $inventory->brand . ' exceeds available stock (' . $inventory->quantity . ').');
+                return;
+            }
+
+            $total = round($item['quantity_used'] * (float)$item['cost_per_unit'], 2);
+
+            $expense = Expense::create([
+                'client_id' => $this->client_id,
+                'inventory_id' => $item['inventory_id'],
+                'quantity_used' => $item['quantity_used'],
+                'cost_per_unit' => $item['cost_per_unit'],
+                'total_cost' => $total,
+                'released_at' => now(),
+            ]);
+
+            $createdExpenses[] = $expense;
+
+            // Update inventory stock and status
+            $inventory->quantity = $inventory->quantity - $item['quantity_used'];
+            if ($inventory->quantity <= 0) {
+                $inventory->quantity = 0;
+                $inventory->status = 'out_of_stock';
+            } elseif ($inventory->quantity <= $inventory->min_stock_level) {
+                $inventory->status = 'critical';
+            } else {
+                $inventory->status = 'normal';
+            }
+            $inventory->save();
+            $updatedInventories[] = $inventory;
+
+            // Log history for expense
+            History::create([
+                'user_id' => auth()->id(),
+                'action' => 'create',
+                'model' => 'expense',
+                'model_id' => $expense->id,
+                'changes' => [
+                    'client_id' => $expense->client_id,
+                    'inventory_id' => $expense->inventory_id,
+                    'quantity_used' => $expense->quantity_used,
+                    'total_cost' => $expense->total_cost,
+                ],
+            ]);
+        }
+
+        // Log history for inventories
+        foreach ($updatedInventories as $inventory) {
+            History::create([
+                'user_id' => auth()->id(),
+                'action' => 'update',
+                'model' => 'inventory',
+                'model_id' => $inventory->id,
+                'changes' => [
+                    'quantity' => $inventory->quantity,
+                    'status' => $inventory->status,
+                ],
+            ]);
+        }
+
+        // Refresh lists
+        $this->loadInventories();
+        $this->clients = Client::with('expenses')->get();
+
+        $this->closeModal();
+        session()->flash('message', count($createdExpenses) . ' release(s) recorded and inventory updated.');
     }
 
     public function save()
@@ -181,6 +362,12 @@ class Masterlist extends Component
     }
 
     public function updatedSearch()
+    {
+        $this->loadInventories();
+        $this->resetSelection();
+    }
+
+    public function performSearch()
     {
         $this->loadInventories();
         $this->resetSelection();

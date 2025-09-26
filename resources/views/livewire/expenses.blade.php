@@ -3,14 +3,35 @@
         <h1 class="text-2xl font-bold">Expenses Tracking</h1>
         @if(auth()->user()->isSystemAdmin())
             <div class="flex gap-3">
-                <button wire:click="openCreateModal" class="{{ $clients->count() > 0 ? 'bg-red-500 hover:bg-red-600 cursor-pointer' : 'bg-red-400 cursor-not-allowed opacity-60' }} text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 shadow-md border-2 border-red-500" {{ $clients->count() === 0 ? 'disabled' : '' }}>
-                    <x-heroicon-o-plus class="w-4 h-4" />
-                    Record Release
+                <button wire:click="openClientModal" class="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold py-2 px-6 rounded-lg flex items-center gap-2 shadow-lg border-2 border-green-500 transform hover:scale-105 transition-all duration-200">
+                    <x-heroicon-o-user-plus class="w-5 h-5" />
+                    Add New Client
                 </button>
-                <button wire:click="openClientModal" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 shadow-md border-2 border-green-600">
-                    <x-heroicon-o-user-plus class="w-4 h-4" />
-                    Add Client
-                </button>
+            </div>
+        @endif
+    
+        <!-- Delete Client Modal -->
+        @if($showDeleteClientModal)
+            <div class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50" id="delete-client-modal">
+                <div class="p-5 border w-11/12 max-w-md shadow-lg rounded-md bg-white dark:bg-gray-800">
+                    <div class="mt-3">
+                        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Delete Client</h3>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                            Are you sure you want to delete this client? This action cannot be undone.
+                        </p>
+                        <form wire:submit.prevent="confirmDeleteClient" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Enter your password to confirm</label>
+                                <input type="password" wire:model="deletePassword" class="w-full shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none focus:shadow-outline" />
+                                @error('deletePassword') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded">Delete Client</button>
+                                <button type="button" wire:click="closeModal" class="bg-gray-500 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             </div>
         @endif
     </div>
@@ -36,107 +57,89 @@
             @endif
         </div>
     @else
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-w-screen-2xl mx-auto">
             @foreach($clients as $client)
-            <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow hover:shadow-lg transition-shadow">
-                <div class="flex justify-between items-start mb-4">
-                    <div class="flex items-center space-x-3">
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow hover:shadow-lg transition-all duration-200 border border-gray-200 dark:border-gray-700 min-h-48 flex flex-col">
+                <!-- 1st Row: Logo, Client, Branch, Buttons -->
+                <div class="flex justify-between items-start mb-3">
+                    <div class="flex items-center flex-1">
                         @if($client->logo_url)
-                            <img src="{{ $client->logo_url }}" alt="{{ $client->name }} logo" class="w-12 h-12 rounded-lg object-cover border border-gray-200 dark:border-gray-700">
+                            <img src="{{ $client->logo_url }}" alt="{{ $client->name }} logo" class="w-12 h-12 rounded-lg object-cover border-2 border-gray-200 dark:border-gray-700">
                         @else
-                            <div class="w-12 h-12 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                            <div class="w-12 h-12 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center border-2 border-gray-300 dark:border-gray-600">
                                 <x-heroicon-o-building-office class="w-6 h-6 text-gray-500 dark:text-gray-400" />
                             </div>
                         @endif
-                        <div>
-                            <h3 class="text-lg font-semibold">{{ $client->name }}</h3>
+                        <div class="flex flex-col ml-3">
+                            <h3 class="text-xl font-bold text-gray-900 dark:text-white">{{ $client->name }}</h3>
                             <p class="text-gray-600 dark:text-gray-400">{{ $client->branch }}</p>
                         </div>
                     </div>
                     @if(auth()->user()->isSystemAdmin())
                         <div class="flex gap-2">
                             <button wire:click="openClientModal({{ $client->id }})"
-                                    class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 p-1 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+                                    class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 p-2 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
                                     title="Edit Client">
-                                <x-heroicon-o-pencil class="w-4 h-4" />
+                                <x-heroicon-o-pencil class="w-5 h-5" />
                             </button>
-                            <button onclick="if(!confirm('Are you sure you want to delete this client? This action cannot be undone.')) { event.stopImmediatePropagation(); return false; }"
-                                    wire:click="deleteClient({{ $client->id }})"
-                                    class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                            <button wire:click="openDeleteClientModal({{ $client->id }})"
+                                    class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 p-2 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                                     title="Delete Client">
-                                <x-heroicon-o-trash class="w-4 h-4" />
+                                <x-heroicon-o-trash class="w-5 h-5" />
                             </button>
                         </div>
                     @endif
                 </div>
-                <div class="flex justify-between items-center">
+
+                <!-- 2nd Row: Dates, Status, Job Type -->
+                <div class="flex flex-col gap-1 text-sm mb-3">
+                    @if($client->start_date)
+                        <div class="text-gray-500 dark:text-gray-400">
+                            <div class="flex">
+                                <x-heroicon-o-calendar class="w-4 h-4 mr-1" />
+                                Date Started: {{ $client->start_date->format('M d, Y') }}
+                            </div>
+                            @if($client->end_date)
+                                <div class="flex mt-1">
+                                    <x-heroicon-o-calendar class="w-4 h-4 mr-1" />
+                                    Date Ended: {{ $client->end_date->format('M d, Y') }}
+                                </div>
+                            @endif
+                        </div>
+                    @endif
+                    <div class="flex gap-2">
+                        <span class="px-2 py-1 rounded-full text-xs font-medium
+                            @if($client->status == 'settled') bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200
+                            @else bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 @endif">
+                            {{ ucfirst(str_replace('_', ' ', $client->status)) }}
+                        </span>
+                        @if($client->job_type)
+                            <span class="text-gray-500 dark:text-gray-400 capitalize">{{ $client->job_type }}</span>
+                        @endif
+                    </div>
+                </div>
+
+                <!-- 3rd Row: Total Expenses and View Button -->
+                <div class="flex justify-between items-center pt-3 border-t border-gray-200 dark:border-gray-700 mt-auto">
                     <div>
                         <p class="text-sm text-gray-500 dark:text-gray-400">Total Expenses</p>
-                        <p class="text-2xl font-bold text-green-600">₱{{ number_format($client->expenses->sum('total_cost'), 2) }}</p>
+                        <p class="text-2xl font-bold text-green-600 dark:text-green-400">₱{{ number_format($client->expenses->sum('total_cost'), 2) }}</p>
                     </div>
-                    <button wire:click="viewExpenses({{ $client->id }})" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded flex items-center gap-2">
+                    <button wire:click="viewExpenses({{ $client->id }})" class="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 shadow-lg transform hover:scale-105 transition-all duration-200">
                         <x-heroicon-o-eye class="w-4 h-4" />
                         View Expenses
                     </button>
                 </div>
+
             </div>
         @endforeach
         </div>
     @endif
 
-    <!-- Create Release Modal -->
-    @if($showModal)
-        <div class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" id="create-expense-modal">
-            <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-xl shadow-lg rounded-md bg-white dark:bg-gray-800">
-                <div class="mt-3">
-                    <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Record Release</h3>
-                    <form wire:submit.prevent="save" class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Client</label>
-                            <select wire:model="client_id" class="w-full shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none focus:shadow-outline">
-                                <option value="">Select client...</option>
-                                @foreach($clients as $client)
-                                    <option value="{{ $client->id }}">{{ $client->name }} — {{ $client->branch }}</option>
-                                @endforeach
-                            </select>
-                            @error('client_id') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Material</label>
-                            <select wire:model="inventory_id" class="w-full shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none focus:shadow-outline">
-                                <option value="">Select material...</option>
-                                @foreach($inventoryOptions as $item)
-                                    <option value="{{ $item->id }}">{{ $item->brand }} — {{ \Illuminate\Support\Str::limit($item->description, 40) }} (Stock: {{ $item->quantity }})</option>
-                                @endforeach
-                            </select>
-                            @error('inventory_id') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
-                        </div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Quantity</label>
-                                <input type="number" min="1" wire:model="quantity_used" class="w-full shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none focus:shadow-outline" />
-                                @error('quantity_used') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Cost per Unit</label>
-                                <input type="number" min="0" step="0.01" wire:model="cost_per_unit" class="w-full shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none focus:shadow-outline" />
-                                @error('cost_per_unit') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
-                            </div>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded">Save</button>
-                            <button type="button" wire:click="closeModal" class="bg-gray-500 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded">Cancel</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    @endif
-
     <!-- Modal -->
     @if($selectedClient)
-        <div class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" id="expenses-modal">
-            <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white dark:bg-gray-800">
+        <div class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50" id="expenses-modal">
+            <div class="p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white dark:bg-gray-800">
                 <div class="mt-3">
                     <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Expenses for {{ $selectedClient->name }} - {{ $selectedClient->branch }}</h3>
                     <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -147,6 +150,9 @@
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Cost per Unit</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Total Cost</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Date & Time</th>
+                                @if(auth()->user()->isSystemAdmin())
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                                @endif
                             </tr>
                         </thead>
                         <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -154,9 +160,26 @@
                                 <tr>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ $expense->inventory->brand }} - {{ $expense->inventory->description }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ $expense->quantity_used }}</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">₱{{ number_format($expense->cost_per_unit, 2) }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                                        @if($editingExpenseId == $expense->id)
+                                            <input type="number" min="0" step="0.01" wire:model="editCostPerUnit" class="w-20 shadow appearance-none border rounded py-1 px-2 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none focus:shadow-outline" />
+                                            @error('editCostPerUnit') <span class="text-red-500 text-xs block">{{ $message }}</span> @enderror
+                                        @else
+                                            ₱{{ number_format($expense->cost_per_unit, 2) }}
+                                        @endif
+                                    </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">₱{{ number_format($expense->total_cost, 2) }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ $expense->released_at->setTimezone('Asia/Manila')->format('M d, Y H:i') }}</td>
+                                    @if(auth()->user()->isSystemAdmin())
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        @if($editingExpenseId == $expense->id)
+                                            <button wire:click="saveEditExpense" class="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300 mr-2">Save</button>
+                                            <button wire:click="cancelEditExpense" class="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300">Cancel</button>
+                                        @else
+                                            <button wire:click="editExpense({{ $expense->id }})" class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300">Edit</button>
+                                        @endif
+                                    </td>
+                                    @endif
                                 </tr>
                             @endforeach
                         </tbody>
@@ -173,8 +196,8 @@
 
     <!-- Client Management Modal -->
     @if($showClientModal)
-        <div class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" id="client-modal">
-            <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-lg shadow-lg rounded-md bg-white dark:bg-gray-800">
+        <div class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50" id="client-modal">
+            <div class="p-5 border w-11/12 max-w-lg shadow-lg rounded-md bg-white dark:bg-gray-800">
                 <div class="mt-3">
                     <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-6">
                         {{ $editingClient ? 'Edit Client' : 'Add New Client' }}
@@ -238,6 +261,31 @@
                                    class="w-full shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none focus:shadow-outline"
                                    placeholder="Enter branch or location" />
                             @error('clientBranch') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date</label>
+                                <input wire:model="startDate"
+                                       type="date"
+                                       class="w-full shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none focus:shadow-outline" />
+                                @error('startDate') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">End Date</label>
+                                <input wire:model="endDate"
+                                       type="date"
+                                       class="w-full shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none focus:shadow-outline" />
+                                @error('endDate') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Job Type</label>
+                            <select wire:model="jobType" class="w-full shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none focus:shadow-outline">
+                                <option value="">Select job type...</option>
+                                <option value="service">Service</option>
+                                <option value="installation">Installation</option>
+                            </select>
+                            @error('jobType') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                         </div>
                         <div class="flex items-center justify-between">
                             <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded flex items-center gap-2">
