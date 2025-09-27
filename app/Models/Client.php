@@ -3,15 +3,10 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Spatie\MediaLibrary\HasMedia;
-use Spatie\MediaLibrary\InteractsWithMedia;
-use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
-class Client extends Model implements HasMedia
+class Client extends Model
 {
-    use InteractsWithMedia;
-
-    protected $fillable = ['name', 'branch', 'start_date', 'end_date', 'job_type', 'status'];
+    protected $fillable = ['name', 'branch', 'start_date', 'end_date', 'job_type', 'status', 'image_blob', 'image_mime_type', 'image_filename'];
 
     protected function casts(): array
     {
@@ -21,20 +16,82 @@ class Client extends Model implements HasMedia
         ];
     }
 
+    // Auto caps lock mutators for text fields
+    public function setNameAttribute($value)
+    {
+        $this->attributes['name'] = is_string($value) ? strtoupper($value) : $value;
+    }
+
+    public function setBranchAttribute($value)
+    {
+        $this->attributes['branch'] = is_string($value) ? strtoupper($value) : $value;
+    }
+
+    public function setJobTypeAttribute($value)
+    {
+        // Only allow valid enum values for job_type
+        $allowedValues = ['service', 'installation'];
+        if (is_string($value) && in_array(strtolower($value), $allowedValues)) {
+            $this->attributes['job_type'] = strtolower($value); // Keep as lowercase to match enum
+        } else {
+            $this->attributes['job_type'] = $value; // Keep original value if not in allowed list
+        }
+    }
+
     public function expenses()
     {
         return $this->hasMany(Expense::class);
     }
 
-    public function registerMediaCollections(): void
+    // BLOB Image Methods
+    public function storeImageAsBlob($imagePath)
     {
-        $this->addMediaCollection('logo')
-            ->singleFile()
-            ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml']);
+        if (!file_exists($imagePath)) {
+            return false;
+        }
+
+        $imageData = file_get_contents($imagePath);
+        $base64Image = base64_encode($imageData);
+
+        $this->image_blob = $base64Image;
+        $this->image_mime_type = mime_content_type($imagePath);
+        $this->image_filename = basename($imagePath);
+
+        return $this->save();
+    }
+
+    public function getImageBlobAttribute($value)
+    {
+        if (!$value) {
+            return null;
+        }
+
+        // Ensure we have MIME type
+        $mimeType = $this->image_mime_type ?: 'image/jpeg';
+
+        return 'data:' . $mimeType . ';base64,' . $value;
     }
 
     public function getLogoUrlAttribute()
     {
-        return $this->getFirstMediaUrl('logo') ?: null;
+        if ($this->image_blob) {
+            return $this->image_blob;
+        }
+
+        // Fallback to no-image placeholder
+        return asset('images/no-image.png');
+    }
+
+    public function hasImageBlob()
+    {
+        return !empty($this->image_blob);
+    }
+
+    public function deleteImageBlob()
+    {
+        $this->image_blob = null;
+        $this->image_mime_type = null;
+        $this->image_filename = null;
+        return $this->save();
     }
 }

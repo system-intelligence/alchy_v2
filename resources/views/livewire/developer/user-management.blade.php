@@ -1,14 +1,11 @@
 <div>
     <div class="p-6 border-b border-gray-200 dark:border-gray-700">
         <div class="flex items-center justify-between">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">User Management</h3>
-            <div class="flex items-center gap-3">
-                <span class="text-sm text-gray-500 dark:text-gray-400">{{ $users->count() }} total users</span>
-                <button wire:click="openModal" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded flex items-center gap-2">
-                    <x-heroicon-o-plus class="w-4 h-4" />
-                    Add User
-                </button>
-            </div>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">User Management ({{ $users->count() }} total)</h3>
+            <button wire:click="openModal" class="bg-blue-500 hover:bg-blue-700 text-white font-semibold py-1.5 px-3 rounded text-sm flex items-center gap-2">
+                <x-heroicon-o-plus class="w-4 h-4" />
+                Add User
+            </button>
         </div>
     </div>
 

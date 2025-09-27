@@ -21,6 +21,34 @@ class Expenses extends Component
     public $editingExpenseId = null;
     public $editCostPerUnit = 0;
 
+    // Date filter
+    public $filterDate = null;
+    public $filterByMonth = false;
+
+    // Calendar theme
+    public $calendarTheme = 'default';
+    public $themeOpen = false;
+    public $themes = [
+        'default' => ['name' => 'Default', 'class' => 'bg-white dark:bg-gray-800'],
+        'blue' => ['name' => 'Blue', 'class' => 'bg-blue-50 dark:bg-blue-900/20'],
+        'green' => ['name' => 'Green', 'class' => 'bg-green-50 dark:bg-green-900/20'],
+        'purple' => ['name' => 'Purple', 'class' => 'bg-purple-50 dark:bg-purple-900/20'],
+        'orange' => ['name' => 'Orange', 'class' => 'bg-orange-50 dark:bg-orange-900/20'],
+        'pink' => ['name' => 'Pink', 'class' => 'bg-pink-50 dark:bg-pink-900/20'],
+    ];
+
+    // Calendar
+    public $calendarMonth;
+    public $calendarYear;
+
+    // Custom selects
+    public $monthOpen = false;
+    public $monthSelected;
+    public $yearOpen = false;
+    public $yearSelected;
+    public $monthItems = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    public $yearItems = [];
+
 
     // Client Management modal state
     public $showClientModal = false;
@@ -43,6 +71,11 @@ class Expenses extends Component
     public function mount()
     {
         $this->loadClients();
+        $this->calendarMonth = now()->month;
+        $this->calendarYear = now()->year;
+        $this->monthSelected = $this->calendarMonth - 1;
+        $this->yearItems = range(2025, date('Y') + 10);
+        $this->yearSelected = array_search($this->calendarYear, $this->yearItems);
     }
 
     public function loadClients()
@@ -53,7 +86,13 @@ class Expenses extends Component
     public function viewExpenses($clientId)
     {
         $this->selectedClient = Client::with('expenses')->find($clientId);
-        $this->clientExpenses = Expense::where('client_id', $clientId)->with('inventory')->latest()->get();
+        $query = Expense::where('client_id', $clientId)->with('inventory');
+        if ($this->filterByMonth && $this->calendarYear && $this->calendarMonth) {
+            $query->whereYear('released_at', $this->calendarYear)->whereMonth('released_at', $this->calendarMonth);
+        } elseif ($this->filterDate) {
+            $query->whereDate('released_at', $this->filterDate);
+        }
+        $this->clientExpenses = $query->latest()->get();
     }
 
 
@@ -96,13 +135,14 @@ class Expenses extends Component
             return;
         }
 
+        $name = $client->name . ' / ' . $client->branch;
         $client->delete();
         History::create([
             'user_id' => auth()->id(),
             'action' => 'delete',
             'model' => 'client',
             'model_id' => $this->deleteClientId,
-            'changes' => ['deleted' => true],
+            'changes' => ['name' => $name, 'deleted' => true],
         ]);
 
         $this->loadClients();
@@ -168,6 +208,114 @@ class Expenses extends Component
     {
         $this->editingExpenseId = null;
         $this->editCostPerUnit = 0;
+    }
+
+    public function applyDateFilter()
+    {
+        $this->filterByMonth = false;
+        if ($this->selectedClient) {
+            $this->viewExpenses($this->selectedClient->id);
+        }
+    }
+
+    public function applyMonthFilter()
+    {
+        $this->filterByMonth = true;
+        $this->filterDate = null;
+        if ($this->selectedClient) {
+            $this->viewExpenses($this->selectedClient->id);
+        }
+    }
+
+    public function clearDateFilter()
+    {
+        $this->filterDate = null;
+        $this->filterByMonth = false;
+        if ($this->selectedClient) {
+            $this->viewExpenses($this->selectedClient->id);
+        }
+    }
+
+    public function selectDate($day)
+    {
+        $this->filterDate = sprintf('%04d-%02d-%02d', $this->calendarYear, $this->calendarMonth, $day);
+        if ($this->selectedClient) {
+            $this->viewExpenses($this->selectedClient->id);
+        }
+    }
+
+    public function changeMonth($direction)
+    {
+        if ($direction === 'prev') {
+            $this->calendarMonth--;
+            if ($this->calendarMonth < 1) {
+                $this->calendarMonth = 12;
+                $this->calendarYear--;
+            }
+        } elseif ($direction === 'next') {
+            $this->calendarMonth++;
+            if ($this->calendarMonth > 12) {
+                $this->calendarMonth = 1;
+                $this->calendarYear++;
+            }
+        }
+        // Update selected indices
+        $this->monthSelected = $this->calendarMonth - 1;
+        $this->yearSelected = array_search($this->calendarYear, $this->yearItems);
+    }
+
+    public function updatedCalendarMonth()
+    {
+        // Optional: refresh if needed
+    }
+
+    public function updatedCalendarYear()
+    {
+        // Optional: refresh if needed
+    }
+
+    public function toggleMonth()
+    {
+        $this->monthOpen = !$this->monthOpen;
+        $this->yearOpen = false;
+    }
+
+    public function selectMonth($index)
+    {
+        $this->monthSelected = $index;
+        $this->calendarMonth = $index + 1;
+        $this->monthOpen = false;
+    }
+
+    public function toggleYear()
+    {
+        $this->yearOpen = !$this->yearOpen;
+        $this->monthOpen = false;
+    }
+
+    public function selectYear($index)
+    {
+        $this->yearSelected = $index;
+        $this->calendarYear = $this->yearItems[$index];
+        $this->yearOpen = false;
+    }
+
+    public function toggleTheme()
+    {
+        $this->themeOpen = !$this->themeOpen;
+        $this->monthOpen = false;
+        $this->yearOpen = false;
+    }
+
+    public function selectTheme($theme)
+    {
+        $this->calendarTheme = $theme;
+        $this->themeOpen = false;
+    }
+
+    public function getDaysInMonthProperty()
+    {
+        return cal_days_in_month(CAL_GREGORIAN, $this->calendarMonth, $this->calendarYear);
     }
 
     public function openClientModal($clientId = null)
@@ -236,10 +384,7 @@ class Expenses extends Component
 
             // Handle logo upload
             if ($this->clientLogo) {
-                $client->addMedia($this->clientLogo->getRealPath())
-                    ->usingName($this->clientLogo->getClientOriginalName())
-                    ->usingFileName($this->clientLogo->getClientOriginalName())
-                    ->toMediaCollection('logo');
+                $client->storeImageAsBlob($this->clientLogo->path());
             }
 
             History::create([
@@ -271,10 +416,7 @@ class Expenses extends Component
 
             // Handle logo upload for new client
             if ($this->clientLogo) {
-                $client->addMedia($this->clientLogo->getRealPath())
-                    ->usingName($this->clientLogo->getClientOriginalName())
-                    ->usingFileName($this->clientLogo->getClientOriginalName())
-                    ->toMediaCollection('logo');
+                $client->storeImageAsBlob($this->clientLogo->path());
             }
 
             History::create([

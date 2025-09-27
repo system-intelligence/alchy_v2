@@ -15,6 +15,7 @@ class Masterlist extends Component
     public $editing = false;
     public $inventoryId;
     public $brand, $description, $category, $quantity, $min_stock_level;
+    public $image;
 
     // Filters
     public $search = '';
@@ -162,6 +163,7 @@ class Masterlist extends Component
         $this->category = '';
         $this->quantity = 0;
         $this->min_stock_level = 5;
+        $this->image = null;
     }
 
     public function resetReleaseForm()
@@ -277,6 +279,7 @@ class Masterlist extends Component
             'category' => 'required|string|max:255',
             'quantity' => 'required|integer|min:0',
             'min_stock_level' => 'required|integer|min:0',
+            'image' => 'nullable|image|mimes:png,jpg,jpeg|max:5120',
         ]);
 
         $wasEditing = $this->editing;
@@ -335,6 +338,11 @@ class Masterlist extends Component
             ]);
         }
 
+        // Handle image upload
+        if ($this->image) {
+            $inventory->storeImageAsBlob($this->image->path());
+        }
+
         $this->loadInventories();
         session()->flash('message', $wasEditing ? 'Inventory updated successfully.' : 'Inventory created successfully.');
         $this->closeModal();
@@ -349,13 +357,14 @@ class Masterlist extends Component
             session()->flash('message', 'Inventory not found.');
             return;
         }
+        $name = $inventory->brand . ' / ' . $inventory->description;
         $inventory->delete();
         History::create([
             'user_id' => auth()->id(),
             'action' => 'delete',
             'model' => 'inventory',
             'model_id' => $id,
-            'changes' => ['deleted' => true],
+            'changes' => ['name' => $name, 'deleted' => true],
         ]);
         $this->loadInventories();
         session()->flash('message', 'Inventory deleted successfully.');
@@ -406,12 +415,13 @@ class Masterlist extends Component
         $inventories = Inventory::whereIn('id', $this->selectedItems)->get();
 
         foreach ($inventories as $inventory) {
+            $name = $inventory->brand . ' / ' . $inventory->description;
             History::create([
                 'user_id' => auth()->id(),
                 'action' => 'delete',
                 'model' => 'inventory',
                 'model_id' => $inventory->id,
-                'changes' => ['deleted' => true, 'bulk_delete' => true],
+                'changes' => ['name' => $name, 'deleted' => true, 'bulk_delete' => true],
             ]);
             $inventory->delete();
         }

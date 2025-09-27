@@ -17,6 +17,7 @@
                     </x-nav-link>
                     @if(auth()->user()->isDeveloper())
                     <x-nav-link :href="route('developer.user-management')" :active="request()->routeIs('developer.user-management')">
+                        <x-heroicon-o-users class="w-4 h-4 mr-2" />
                         {{ __('User Management') }}
                     </x-nav-link>
                     @endif
@@ -77,6 +78,7 @@
             </x-responsive-nav-link>
             @if(auth()->user()->isDeveloper())
             <x-responsive-nav-link :href="route('developer.user-management')" :active="request()->routeIs('developer.user-management')">
+                <x-heroicon-o-users class="w-4 h-4 mr-2" />
                 {{ __('User Management') }}
             </x-responsive-nav-link>
             @endif

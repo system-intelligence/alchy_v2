@@ -8,6 +8,7 @@ use App\Models\History as HistoryModel;
 class History extends Component
 {
     public $histories;
+    public $viewMode = 'grid'; // 'grid' or 'table'
 
     public function mount()
     {
@@ -22,6 +23,11 @@ class History extends Component
         } else {
             $this->histories = HistoryModel::where('user_id', $user->id)->with('user')->latest()->get();
         }
+    }
+
+    public function setViewMode($mode)
+    {
+        $this->viewMode = $mode;
     }
 
     public function render()

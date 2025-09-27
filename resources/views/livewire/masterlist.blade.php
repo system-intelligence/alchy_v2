@@ -251,6 +251,48 @@
                 <div class="mt-3">
                     <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">{{ $editing ? 'Edit Inventory' : 'Add Inventory' }}</h3>
                     <form wire:submit.prevent="save">
+                        <!-- Image Upload Section -->
+                        <div class="flex flex-col items-center justify-center mb-6">
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">Inventory Image</label>
+
+                            <!-- Upload Area -->
+                            <div class="w-full max-w-sm">
+                                <div class="relative border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center hover:border-blue-400 dark:hover:border-blue-500 transition-colors cursor-pointer bg-gray-50 dark:bg-gray-800/50 hover:bg-blue-50 dark:hover:bg-blue-900/20">
+                                    @if($image)
+                                        <img src="{{ $image->temporaryUrl() }}" alt="Image preview" class="w-16 h-16 rounded-lg object-cover mx-auto mb-3 border border-gray-200 dark:border-gray-700">
+                                    @elseif($editing && $inventoryId)
+                                        @php
+                                            $inventory = \App\Models\Inventory::find($inventoryId);
+                                        @endphp
+                                        @if($inventory && $inventory->hasImageBlob())
+                                            <img src="{{ $inventory->image_url }}" alt="Current image" class="w-16 h-16 rounded-lg object-cover mx-auto mb-3 border border-gray-200 dark:border-gray-700">
+                                        @else
+                                            <div class="w-16 h-16 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center mx-auto mb-3">
+                                                <x-heroicon-o-photo class="w-8 h-8 text-gray-500 dark:text-gray-400" />
+                                            </div>
+                                        @endif
+                                    @else
+                                        <div class="w-16 h-16 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center mx-auto mb-3">
+                                            <x-heroicon-o-photo class="w-8 h-8 text-gray-500 dark:text-gray-400" />
+                                        </div>
+                                    @endif
+
+                                    <div class="text-center">
+                                        <x-heroicon-o-cloud-arrow-up class="w-8 h-8 text-gray-400 dark:text-gray-500 mx-auto mb-2" />
+                                        <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Upload Image</p>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400">PNG, JPG up to 5MB</p>
+                                    </div>
+
+                                    <input type="file"
+                                           wire:model="image"
+                                           accept="image/png,image/jpeg,image/jpg"
+                                           class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                                </div>
+
+                                @error('image') <span class="text-red-500 text-xs mt-2 block">{{ $message }}</span> @enderror
+                            </div>
+                        </div>
+
                         <div class="mb-4">
                             <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="brand">Brand</label>
                             <input wire:model="brand" type="text" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="brand">

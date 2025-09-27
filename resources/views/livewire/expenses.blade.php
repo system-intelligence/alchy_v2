@@ -142,6 +142,189 @@
             <div class="p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white dark:bg-gray-800">
                 <div class="mt-3">
                     <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Expenses for {{ $selectedClient->name }} - {{ $selectedClient->branch }}</h3>
+
+                    <!-- Calendar Filter -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Filter by Date</label>
+                        <div class="p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg {{ $themes[$calendarTheme]['class'] }}">
+                            <!-- Month/Year Selector -->
+                            <div class="flex items-center justify-between mb-6">
+                                <button wire:click="changeMonth('prev')" class="p-3 rounded-full bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-all duration-200 shadow-sm">
+                                    <x-heroicon-o-chevron-left class="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                                </button>
+                                <div class="flex items-center space-x-3">
+                                    <!-- Month Select -->
+                                    <div class="relative">
+                                        <button wire:click="toggleMonth" class="w-32 flex items-center justify-between h-12 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                            @if ($monthSelected !== null)
+                                                {{ $monthItems[$monthSelected] }}
+                                            @else
+                                                Choose...
+                                            @endif
+                                            <div class="text-gray-400">
+                                                @if ($monthOpen)
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd"/>
+                                                    </svg>
+                                                @else
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                                                    </svg>
+                                                @endif
+                                            </div>
+                                        </button>
+                                        @if ($monthOpen)
+                                            <ul class="bg-white dark:bg-gray-700 absolute mt-1 z-10 border border-gray-300 dark:border-gray-600 rounded-lg w-full shadow-lg">
+                                                @foreach($monthItems as $index => $item)
+                                                    <li wire:click="selectMonth({{ $index }})"
+                                                        @class([
+                                                            'px-3 py-2 cursor-pointer flex items-center justify-between hover:bg-blue-50 dark:hover:bg-blue-900/30',
+                                                            'bg-blue-500 text-white' => $monthSelected === $index,
+                                                        ])
+                                                    >
+                                                        {{ $item }}
+                                                        @if ($monthSelected === $index)
+                                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                                                            </svg>
+                                                        @endif
+                                                    </li>
+                                                @endforeach
+                                            </ul>
+                                        @endif
+                                        @if($filterByMonth)
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="absolute top-1 right-2 h-4 w-4 text-orange-500" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                            </svg>
+                                        @endif
+                                    </div>
+
+                                    <!-- Year Select -->
+                                    <div class="relative">
+                                        <button wire:click="toggleYear" class="w-24 flex items-center justify-between h-12 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                            @if ($yearSelected !== null)
+                                                {{ $yearItems[$yearSelected] }}
+                                            @else
+                                                Choose...
+                                            @endif
+                                            <div class="text-gray-400">
+                                                @if ($yearOpen)
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd"/>
+                                                    </svg>
+                                                @else
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                                                    </svg>
+                                                @endif
+                                            </div>
+                                        </button>
+                                        @if ($yearOpen)
+                                            <ul class="bg-white dark:bg-gray-700 absolute mt-1 z-10 border border-gray-300 dark:border-gray-600 rounded-lg w-full shadow-lg max-h-48 overflow-y-auto">
+                                                @foreach($yearItems as $index => $item)
+                                                    <li wire:click="selectYear({{ $index }})"
+                                                        @class([
+                                                            'px-3 py-2 cursor-pointer flex items-center justify-between hover:bg-blue-50 dark:hover:bg-blue-900/30',
+                                                            'bg-blue-500 text-white' => $yearSelected === $index,
+                                                        ])
+                                                    >
+                                                        {{ $item }}
+                                                        @if ($yearSelected === $index)
+                                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                                                            </svg>
+                                                        @endif
+                                                    </li>
+                                                @endforeach
+                                            </ul>
+                                        @endif
+                                        @if($filterByMonth)
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="absolute top-1 right-2 h-4 w-4 text-orange-500" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                            </svg>
+                                        @endif
+                                    </div>
+
+                                    <!-- Theme Selector -->
+                                    <div class="relative">
+                                        <button wire:click="toggleTheme" class="p-3 rounded-full bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-all duration-200 shadow-sm">
+                                            <x-heroicon-o-adjustments-horizontal class="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                                        </button>
+                                        @if ($themeOpen)
+                                            <ul class="bg-white dark:bg-gray-700 absolute mt-1 right-0 z-10 border border-gray-300 dark:border-gray-600 rounded-lg w-48 shadow-lg">
+                                                @foreach($themes as $key => $theme)
+                                                    <li wire:click="selectTheme('{{ $key }}')"
+                                                        @class([
+                                                            'px-3 py-2 cursor-pointer flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-600',
+                                                            'bg-blue-500 text-white' => $calendarTheme === $key,
+                                                        ])
+                                                    >
+                                                        <div class="flex items-center space-x-2">
+                                                            <div class="w-4 h-4 rounded {{ $theme['class'] }} border border-gray-300 dark:border-gray-600"></div>
+                                                            <span>{{ $theme['name'] }}</span>
+                                                        </div>
+                                                        @if ($calendarTheme === $key)
+                                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                                                            </svg>
+                                                        @endif
+                                                    </li>
+                                                @endforeach
+                                            </ul>
+                                        @endif
+                                    </div>
+                                </div>
+                                <button wire:click="changeMonth('next')" class="p-3 rounded-full bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-all duration-200 shadow-sm">
+                                    <x-heroicon-o-chevron-right class="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                                </button>
+                            </div>
+
+                            <!-- Day Headers -->
+                            <div class="grid grid-cols-7 gap-1 mb-3">
+                                <div class="w-10 h-10 text-center text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider flex items-center justify-center">Sun</div>
+                                <div class="w-10 h-10 text-center text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider flex items-center justify-center">Mon</div>
+                                <div class="w-10 h-10 text-center text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider flex items-center justify-center">Tue</div>
+                                <div class="w-10 h-10 text-center text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider flex items-center justify-center">Wed</div>
+                                <div class="w-10 h-10 text-center text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider flex items-center justify-center">Thu</div>
+                                <div class="w-10 h-10 text-center text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider flex items-center justify-center">Fri</div>
+                                <div class="w-10 h-10 text-center text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider flex items-center justify-center">Sat</div>
+                            </div>
+
+                            <!-- Days Grid -->
+                            <div class="grid grid-cols-7 gap-1">
+                                @php
+                                    $firstDayOfMonth = date('w', strtotime("$calendarYear-$calendarMonth-01"));
+                                    $totalCells = $firstDayOfMonth + $this->daysInMonth;
+                                    $rows = ceil($totalCells / 7);
+                                @endphp
+
+                                @for($cell = 0; $cell < $rows * 7; $cell++)
+                                    @if($cell < $firstDayOfMonth || $cell >= $firstDayOfMonth + $this->daysInMonth)
+                                        <div class="w-10 h-10"></div>
+                                    @else
+                                        @php $day = $cell - $firstDayOfMonth + 1; @endphp
+                                        <button
+                                            wire:click="selectDate({{ $day }})"
+                                            class="w-10 h-10 text-sm font-medium rounded-lg bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 active:scale-95 transition-all duration-150 flex items-center justify-center
+                                            {{ $filterDate === sprintf('%04d-%02d-%02d', $calendarYear, $calendarMonth, $day) ? 'bg-orange-500 text-white border-orange-500 shadow-lg scale-105' : 'text-gray-700 dark:text-gray-300' }}">
+                                            {{ $day }}
+                                        </button>
+                                    @endif
+                                @endfor
+                            </div>
+
+                            <!-- Buttons -->
+                            <div class="mt-6 flex justify-center space-x-4">
+                                <button wire:click="applyMonthFilter" class="bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-medium py-2 px-6 rounded-full text-sm transition-colors duration-200">
+                                    Filter by Month
+                                </button>
+                                <button wire:click="clearDateFilter" class="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium py-2 px-6 rounded-full text-sm transition-colors duration-200">
+                                    Clear Filter
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                         <thead class="bg-gray-50 dark:bg-gray-700">
                             <tr>

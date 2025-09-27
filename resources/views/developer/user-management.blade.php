@@ -10,4 +10,4 @@
             <livewire:developer.user-management />
         </div>
     </div>
-</x-app-layout>
+</x-app-layout> 

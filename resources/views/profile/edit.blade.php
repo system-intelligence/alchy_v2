@@ -59,17 +59,20 @@
         <livewire:profile.avatar-upload />
     </div>
 
-    <!-- Update Profile Information -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-        <div class="max-w-xl">
-            @include('profile.partials.update-profile-information-form')
+    <!-- Update Profile Information and Password -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Update Profile Information -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <div class="max-w-xl">
+                @include('profile.partials.update-profile-information-form')
+            </div>
         </div>
-    </div>
 
-    <!-- Update Password -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-        <div class="max-w-xl">
-            @include('profile.partials.update-password-form')
+        <!-- Update Password -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <div class="max-w-xl">
+                @include('profile.partials.update-password-form')
+            </div>
         </div>
     </div>
 

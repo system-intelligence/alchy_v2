@@ -118,7 +118,7 @@
                             <span class="text-sm text-gray-600 dark:text-gray-400">Storage</span>
                             <span class="flex items-center text-sm">
                                 <div class="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                                {{ number_format(\App\Models\Inventory::sum('quantity')) }} items
+                                {{ number_format((disk_total_space('/') - disk_free_space('/')) / 1024 / 1024 / 1024, 2) }} GB used / {{ number_format(disk_total_space('/') / 1024 / 1024 / 1024, 2) }} GB total
                             </span>
                         </div>
                         <div class="flex items-center justify-between">
