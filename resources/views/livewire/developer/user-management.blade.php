@@ -31,9 +31,13 @@
                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
                     <td class="px-6 py-4 whitespace-nowrap">
                         <div class="flex items-center">
-                            <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
-                                <span class="text-gray-700 text-xs font-medium">{{ strtoupper(substr($user->name, 0, 1)) }}</span>
-                            </div>
+                            @if($user->avatar_url && !str_contains($user->avatar_url, 'ui-avatars.com'))
+                                <img src="{{ $user->avatar_url }}" alt="Avatar" class="w-8 h-8 rounded-full object-cover">
+                            @else
+                                <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
+                                    <span class="text-gray-700 text-xs font-medium">{{ strtoupper(substr($user->name, 0, 1)) }}</span>
+                                </div>
+                            @endif
                             <div class="ml-3">
                                 <div class="text-sm font-medium text-gray-900 dark:text-white">{{ $user->name }}</div>
                                 <div class="text-sm text-gray-500 dark:text-gray-400">{{ $user->email }}</div>
@@ -65,8 +69,7 @@
                                     title="Edit">
                                 <x-heroicon-o-pencil class="w-4 h-4" />
                             </button>
-                            <button onclick="if(!confirm('Are you sure you want to delete this user?')) { event.stopImmediatePropagation(); return false; }"
-                                    wire:click="delete({{ $user->id }})"
+                            <button wire:click="openDeleteModal({{ $user->id }})"
                                     class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                                     title="Delete">
                                 <x-heroicon-o-trash class="w-4 h-4" />
@@ -122,6 +125,33 @@
                                 {{ $editing ? 'Update' : 'Create' }}
                             </button>
                             <button type="button" wire:click="closeModal" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    <!-- Delete Confirmation Modal -->
+    @if($showDeleteModal)
+        <div class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50" id="delete-modal">
+            <div class="p-5 border w-11/12 max-w-md shadow-lg rounded-md bg-white dark:bg-gray-800">
+                <div class="mt-3">
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Confirm User Deletion</h3>
+                    <p class="text-gray-600 dark:text-gray-400 mb-4">This action cannot be undone. Please enter your password to confirm.</p>
+                    <form wire:submit.prevent="delete">
+                        <div class="mb-4">
+                            <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="deletePassword">Password</label>
+                            <input wire:model="deletePassword" type="password" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="deletePassword" required>
+                            @error('deletePassword') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <button type="submit" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+                                Delete User
+                            </button>
+                            <button type="button" wire:click="closeDeleteModal" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
                                 Cancel
                             </button>
                         </div>

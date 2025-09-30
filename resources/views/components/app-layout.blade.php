@@ -50,6 +50,12 @@
                             <x-heroicon-o-currency-dollar class="w-5 h-5 mr-3" />
                             Expenses
                         </a>
+                        @if(auth()->user()->isDeveloper())
+                        <a href="{{ route('developer.user-management') }}" class="flex items-center py-3 px-3 rounded-lg transition duration-200 hover:bg-blue-50 dark:hover:bg-gray-700 hover:text-blue-600 {{ request()->routeIs('developer.user-management') ? 'bg-blue-50 dark:bg-gray-700 text-blue-600 border-r-2 border-blue-600' : 'text-gray-700 dark:text-gray-300' }}">
+                            <x-heroicon-o-users class="w-5 h-5 mr-3" />
+                            User Management
+                        </a>
+                        @endif
                     </div>
                 </div>
                 <div class="border-t border-gray-200 dark:border-gray-700 pt-6">

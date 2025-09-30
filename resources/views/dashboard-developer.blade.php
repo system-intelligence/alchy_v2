@@ -64,7 +64,7 @@
         </div>
 
         <!-- Main Content Grid -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <!-- System Logs -->
             <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
                 <div class="p-6 border-b border-gray-200 dark:border-gray-700">
@@ -135,11 +135,6 @@
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <!-- User Management -->
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-                <livewire:developer.user-management />
             </div>
         </div>
     </div>

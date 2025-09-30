@@ -14,6 +14,9 @@ class UserManagement extends Component
     public $editing = false;
     public $userId;
     public $name, $email, $role, $password, $password_confirmation;
+    public $showDeleteModal = false;
+    public $deletePassword = '';
+    public $deletingUserId = null;
 
     public function mount()
     {
@@ -49,6 +52,20 @@ class UserManagement extends Component
     {
         $this->showModal = false;
         $this->resetForm();
+    }
+
+    public function openDeleteModal($id)
+    {
+        $this->ensureDeveloper();
+        $this->deletingUserId = $id;
+        $this->showDeleteModal = true;
+    }
+
+    public function closeDeleteModal()
+    {
+        $this->showDeleteModal = false;
+        $this->deletePassword = '';
+        $this->deletingUserId = null;
     }
 
     public function resetForm()
@@ -134,19 +151,31 @@ class UserManagement extends Component
         $this->closeModal();
     }
 
-    public function delete($id)
+    public function delete()
     {
         $this->ensureDeveloper();
 
-        $user = User::find($id);
+        $this->validate([
+            'deletePassword' => 'required',
+        ]);
+
+        // Verify password
+        if (!Hash::check($this->deletePassword, auth()->user()->password)) {
+            $this->addError('deletePassword', 'Incorrect password.');
+            return;
+        }
+
+        $user = User::find($this->deletingUserId);
         if (!$user) {
             session()->flash('message', 'User not found.');
+            $this->closeDeleteModal();
             return;
         }
 
         // Prevent deleting self
         if ($user->id === auth()->id()) {
             session()->flash('message', 'You cannot delete your own account.');
+            $this->closeDeleteModal();
             return;
         }
 
@@ -155,12 +184,13 @@ class UserManagement extends Component
             'user_id' => auth()->id(),
             'action' => 'delete',
             'model' => 'user',
-            'model_id' => $id,
+            'model_id' => $this->deletingUserId,
             'changes' => ['deleted' => true],
         ]);
 
         $this->loadUsers();
         session()->flash('message', 'User deleted successfully.');
+        $this->closeDeleteModal();
     }
 
     protected function ensureDeveloper(): void
