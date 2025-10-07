@@ -33,7 +33,7 @@
                         <div class="flex items-center">
                             @if($user->avatar_url && !str_contains($user->avatar_url, 'ui-avatars.com'))
                                 <img src="{{ $user->avatar_url }}" alt="Avatar" class="w-8 h-8 rounded-full object-cover">
-                            @else
+                                @else
                                 <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
                                     <span class="text-gray-700 text-xs font-medium">{{ strtoupper(substr($user->name, 0, 1)) }}</span>
                                 </div>

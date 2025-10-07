@@ -3,66 +3,89 @@
 namespace App\Livewire;
 
 use Livewire\Component;
+use Livewire\WithFileUploads;
 use App\Models\Inventory;
 use App\Models\History;
 use App\Models\Client;
 use App\Models\Expense;
+use Illuminate\Database\Eloquent\Collection;
 
+/**
+ * Masterlist Livewire Component
+ *
+ * Manages inventory items, releases, and bulk operations.
+ * Handles CRUD operations for inventory with role-based access control.
+ */
 class Masterlist extends Component
 {
-    public $inventories;
-    public $showModal = false;
-    public $editing = false;
-    public $inventoryId;
-    public $brand, $description, $category, $quantity, $min_stock_level;
+    use WithFileUploads;
+
+    // Inventory CRUD properties
+    public Collection $inventories;
+    public bool $showModal = false;
+    public bool $editing = false;
+    public ?int $inventoryId = null;
+    public ?string $brand = '';
+    public ?string $description = '';
+    public ?string $category = '';
+    public ?int $quantity = 0;
+    public ?int $min_stock_level = 5;
     public $image;
 
     // Filters
-    public $search = '';
-    public $statusFilter = '';
+    public string $search = '';
+    public string $statusFilter = '';
 
     // Bulk operations
-    public $selectAll = false;
-    public $selectedItems = [];
+    public bool $selectAll = false;
+    public array $selectedItems = [];
 
-    // Record Release modal
-    public $showReleaseModal = false;
-    public $showDuplicateModal = false;
-    public $duplicateMessage = '';
-    public $clients;
-    public $inventoryOptions = [];
-    public $client_id = null;
-    public $releaseItems = [];
-    public $selectedInventoryId = null;
+    // Record Release modal properties
+    public bool $showReleaseModal = false;
+    public bool $showDuplicateModal = false;
+    public string $duplicateMessage = '';
+    public Collection $clients;
+    public Collection $inventoryOptions;
+    public ?int $client_id = null;
+    public array $releaseItems = [];
+    public ?int $selectedInventoryId = null;
 
-    // Delete Inventory modal
-    public $showDeleteModal = false;
-    public $deleteInventoryId = null;
-    public $deletePassword = '';
+    // Delete Inventory modal properties
+    public bool $showDeleteModal = false;
+    public ?int $deleteInventoryId = null;
+    public string $deletePassword = '';
 
     // Edit password
-    public $editPassword = '';
+    public string $editPassword = '';
 
-    public function mount()
+    /**
+     * Initialize component data.
+     */
+    public function mount(): void
     {
         $this->loadInventories();
         $this->clients = Client::with('expenses')->get();
         $this->inventoryOptions = Inventory::orderBy('brand')->orderBy('description')->get();
     }
 
-    public function loadInventories()
+    /**
+     * Load inventories with applied filters.
+     */
+    public function loadInventories(): void
     {
         $query = Inventory::query();
 
-        if (trim($this->search) !== '') {
-            $s = '%' . trim($this->search) . '%';
-            $query->where(function ($q) use ($s) {
-                $q->where('brand', 'like', $s)
-                    ->orWhere('description', 'like', $s)
-                    ->orWhere('category', 'like', $s);
+        // Apply search filter
+        if (!empty(trim($this->search))) {
+            $searchTerm = '%' . trim($this->search) . '%';
+            $query->where(function ($q) use ($searchTerm) {
+                $q->where('brand', 'like', $searchTerm)
+                    ->orWhere('description', 'like', $searchTerm)
+                    ->orWhere('category', 'like', $searchTerm);
             });
         }
 
+        // Apply status filter
         if (!empty($this->statusFilter)) {
             $query->where('status', $this->statusFilter);
         }
@@ -70,17 +93,23 @@ class Masterlist extends Component
         $this->inventories = $query->orderBy('created_at', 'desc')->get();
     }
 
-    public function openModal($id = null)
+    /**
+     * Open the inventory modal for creating or editing.
+     *
+     * @param int|null $id
+     */
+    public function openModal(?int $id = null): void
     {
         $this->ensureAdmin();
-
         $this->resetForm();
+
         if ($id) {
             $inventory = Inventory::find($id);
             if (!$inventory) {
-                session()->flash('message', 'Inventory not found.');
+                session()->flash('message', 'Inventory item not found.');
                 return;
             }
+
             $this->editing = true;
             $this->inventoryId = $id;
             $this->brand = $inventory->brand;
@@ -89,6 +118,7 @@ class Masterlist extends Component
             $this->quantity = $inventory->quantity;
             $this->min_stock_level = $inventory->min_stock_level;
         }
+
         $this->showModal = true;
     }
 
@@ -192,10 +222,15 @@ class Masterlist extends Component
         $this->deletePassword = '';
     }
 
-    public function saveRelease()
+    /**
+     * Process inventory release to client.
+     * Creates expenses and updates inventory quantities.
+     */
+    public function saveRelease(): void
     {
+        // Check permissions (admin or user can release)
         if (!auth()->check() || (!auth()->user()->isSystemAdmin() && !auth()->user()->isUser())) {
-            abort(403);
+            abort(403, 'Access denied. Insufficient privileges.');
         }
 
         $this->validate([
@@ -212,103 +247,120 @@ class Masterlist extends Component
             return;
         }
 
-        $createdExpenses = [];
-        $updatedInventories = [];
+        try {
+            $createdExpenses = [];
+            $updatedInventories = [];
 
-        foreach ($this->releaseItems as $item) {
-            $inventory = Inventory::find($item['inventory_id']);
-            if (!$inventory) {
-                session()->flash('message', 'One of the selected inventories not found.');
-                return;
+            \DB::beginTransaction();
+
+            foreach ($this->releaseItems as $item) {
+                $inventory = Inventory::find($item['inventory_id']);
+                if (!$inventory) {
+                    \DB::rollBack();
+                    session()->flash('message', 'One of the selected inventory items not found.');
+                    return;
+                }
+
+                if ($item['quantity_used'] > $inventory->quantity) {
+                    \DB::rollBack();
+                    $this->addError('releaseItems', "Quantity for {$inventory->brand} exceeds available stock ({$inventory->quantity}).");
+                    return;
+                }
+
+                $totalCost = round($item['quantity_used'] * (float)$item['cost_per_unit'], 2);
+
+                // Create expense
+                $expense = Expense::create([
+                    'client_id' => $this->client_id,
+                    'inventory_id' => $item['inventory_id'],
+                    'quantity_used' => $item['quantity_used'],
+                    'cost_per_unit' => $item['cost_per_unit'],
+                    'total_cost' => $totalCost,
+                    'released_at' => now(),
+                ]);
+
+                $createdExpenses[] = $expense;
+
+                // Update inventory
+                $newQuantity = $inventory->quantity - $item['quantity_used'];
+                $newStatus = $newQuantity <= 0 ? 'out_of_stock' :
+                           ($newQuantity <= $inventory->min_stock_level ? 'critical' : 'normal');
+
+                $inventory->update([
+                    'quantity' => max(0, $newQuantity),
+                    'status' => $newStatus,
+                ]);
+
+                $updatedInventories[] = $inventory;
+
+                // Log expense creation
+                History::create([
+                    'user_id' => auth()->id(),
+                    'action' => 'create',
+                    'model' => 'expense',
+                    'model_id' => $expense->id,
+                    'changes' => [
+                        'client_id' => $expense->client_id,
+                        'inventory_id' => $expense->inventory_id,
+                        'quantity_used' => $expense->quantity_used,
+                        'cost_per_unit' => $expense->cost_per_unit,
+                        'total_cost' => $expense->total_cost,
+                    ],
+                ]);
             }
 
-            if ($item['quantity_used'] > $inventory->quantity) {
-                $this->addError('releaseItems', 'Quantity for ' . $inventory->brand . ' exceeds available stock (' . $inventory->quantity . ').');
-                return;
+            // Log inventory updates
+            foreach ($updatedInventories as $inventory) {
+                History::create([
+                    'user_id' => auth()->id(),
+                    'action' => 'update',
+                    'model' => 'inventory',
+                    'model_id' => $inventory->id,
+                    'changes' => [
+                        'quantity' => $inventory->quantity,
+                        'status' => $inventory->status,
+                    ],
+                ]);
             }
 
-            $total = round($item['quantity_used'] * (float)$item['cost_per_unit'], 2);
+            \DB::commit();
 
-            $expense = Expense::create([
-                'client_id' => $this->client_id,
-                'inventory_id' => $item['inventory_id'],
-                'quantity_used' => $item['quantity_used'],
-                'cost_per_unit' => $item['cost_per_unit'],
-                'total_cost' => $total,
-                'released_at' => now(),
-            ]);
+            // Refresh data
+            $this->loadInventories();
+            $this->clients = Client::with('expenses')->get();
 
-            $createdExpenses[] = $expense;
+            $this->closeModal();
+            session()->flash('message', count($createdExpenses) . ' release(s) recorded and inventory updated successfully.');
 
-            // Update inventory stock and status
-            $inventory->quantity = $inventory->quantity - $item['quantity_used'];
-            if ($inventory->quantity <= 0) {
-                $inventory->quantity = 0;
-                $inventory->status = 'out_of_stock';
-            } elseif ($inventory->quantity <= $inventory->min_stock_level) {
-                $inventory->status = 'critical';
-            } else {
-                $inventory->status = 'normal';
-            }
-            $inventory->save();
-            $updatedInventories[] = $inventory;
-
-            // Log history for expense
-            History::create([
-                'user_id' => auth()->id(),
-                'action' => 'create',
-                'model' => 'expense',
-                'model_id' => $expense->id,
-                'changes' => [
-                    'client_id' => $expense->client_id,
-                    'inventory_id' => $expense->inventory_id,
-                    'quantity_used' => $expense->quantity_used,
-                    'total_cost' => $expense->total_cost,
-                ],
-            ]);
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            session()->flash('message', 'An error occurred while processing the release.');
+            \Log::error('Release save error: ' . $e->getMessage());
         }
-
-        // Log history for inventories
-        foreach ($updatedInventories as $inventory) {
-            History::create([
-                'user_id' => auth()->id(),
-                'action' => 'update',
-                'model' => 'inventory',
-                'model_id' => $inventory->id,
-                'changes' => [
-                    'quantity' => $inventory->quantity,
-                    'status' => $inventory->status,
-                ],
-            ]);
-        }
-
-        // Refresh lists
-        $this->loadInventories();
-        $this->clients = Client::with('expenses')->get();
-
-        $this->closeModal();
-        session()->flash('message', count($createdExpenses) . ' release(s) recorded and inventory updated.');
     }
 
-    public function save()
+    /**
+     * Save inventory item (create or update).
+     */
+    public function save(): void
     {
         $this->ensureAdmin();
 
         $this->validate([
             'brand' => 'required|string|max:255',
-            'description' => 'required|string',
-            'category' => 'required|string|max:255',
+            'description' => 'required|string|max:1000',
+            'category' => 'required|string|max:255|in:' . implode(',', Inventory::CATEGORIES),
             'quantity' => 'required|integer|min:0',
             'min_stock_level' => 'required|integer|min:0',
             'image' => 'nullable|image|mimes:png,jpg,jpeg|max:5120',
         ]);
 
+        // Password validation for editing
         if ($this->editing) {
             $this->validate([
-                'editPassword' => 'required',
+                'editPassword' => 'required|string',
             ]);
 
-            // Check password
             if (!\Illuminate\Support\Facades\Hash::check($this->editPassword, auth()->user()->password)) {
                 $this->addError('editPassword', 'The password is incorrect.');
                 return;
@@ -318,67 +370,81 @@ class Masterlist extends Component
         $wasEditing = $this->editing;
 
         // Auto-set status based on quantity and min_stock_level
-        $status = $this->quantity <= 0 ? 'out_of_stock' : ($this->quantity <= $this->min_stock_level ? 'critical' : 'normal');
+        $status = $this->quantity <= 0 ? 'out_of_stock' :
+                 ($this->quantity <= $this->min_stock_level ? 'critical' : 'normal');
 
-        if ($this->editing) {
-            $inventory = Inventory::find($this->inventoryId);
-            if (!$inventory) {
-                session()->flash('message', 'Inventory not found.');
-                return;
+        try {
+            if ($this->editing) {
+                $inventory = Inventory::find($this->inventoryId);
+                if (!$inventory) {
+                    session()->flash('message', 'Inventory item not found.');
+                    return;
+                }
+
+                $inventory->update([
+                    'brand' => $this->brand,
+                    'description' => $this->description,
+                    'category' => $this->category,
+                    'quantity' => $this->quantity,
+                    'min_stock_level' => $this->min_stock_level,
+                    'status' => $status,
+                ]);
+
+                // Log history
+                History::create([
+                    'user_id' => auth()->id(),
+                    'action' => 'update',
+                    'model' => 'inventory',
+                    'model_id' => $inventory->id,
+                    'changes' => [
+                        'brand' => $this->brand,
+                        'description' => $this->description,
+                        'category' => $this->category,
+                        'quantity' => $this->quantity,
+                        'min_stock_level' => $this->min_stock_level,
+                        'status' => $status
+                    ],
+                ]);
+            } else {
+                $inventory = Inventory::create([
+                    'brand' => $this->brand,
+                    'description' => $this->description,
+                    'category' => $this->category,
+                    'quantity' => $this->quantity,
+                    'min_stock_level' => $this->min_stock_level,
+                    'status' => $status,
+                ]);
+
+                // Log history
+                History::create([
+                    'user_id' => auth()->id(),
+                    'action' => 'create',
+                    'model' => 'inventory',
+                    'model_id' => $inventory->id,
+                    'changes' => [
+                        'brand' => $this->brand,
+                        'description' => $this->description,
+                        'category' => $this->category,
+                        'quantity' => $this->quantity,
+                        'min_stock_level' => $this->min_stock_level,
+                        'status' => $status
+                    ],
+                ]);
             }
-            $inventory->update([
-                'brand' => $this->brand,
-                'description' => $this->description,
-                'category' => $this->category,
-                'quantity' => $this->quantity,
-                'min_stock_level' => $this->min_stock_level,
-                'status' => $status,
-            ]);
-            History::create([
-                'user_id' => auth()->id(),
-                'action' => 'update',
-                'model' => 'inventory',
-                'model_id' => $inventory->id,
-                'changes' => [
-                    'brand' => $this->brand,
-                    'category' => $this->category,
-                    'quantity' => $this->quantity,
-                    'min_stock_level' => $this->min_stock_level,
-                    'status' => $status
-                ],
-            ]);
-        } else {
-            $inventory = Inventory::create([
-                'brand' => $this->brand,
-                'description' => $this->description,
-                'category' => $this->category,
-                'quantity' => $this->quantity,
-                'min_stock_level' => $this->min_stock_level,
-                'status' => $status,
-            ]);
-            History::create([
-                'user_id' => auth()->id(),
-                'action' => 'create',
-                'model' => 'inventory',
-                'model_id' => $inventory->id,
-                'changes' => [
-                    'brand' => $this->brand,
-                    'category' => $this->category,
-                    'quantity' => $this->quantity,
-                    'min_stock_level' => $this->min_stock_level,
-                    'status' => $status
-                ],
-            ]);
-        }
 
-        // Handle image upload
-        if ($this->image) {
-            $inventory->storeImageAsBlob($this->image->path());
-        }
+            // Handle image upload
+            if ($this->image) {
+                $inventory->storeImageAsBlob($this->image->path());
+            }
 
-        $this->loadInventories();
-        session()->flash('message', $wasEditing ? 'Inventory updated successfully.' : 'Inventory created successfully.');
-        $this->closeModal();
+            $this->loadInventories();
+            session()->flash('message', $wasEditing ? 'Inventory item updated successfully.' : 'Inventory item created successfully.');
+            $this->closeModal();
+
+        } catch (\Exception $e) {
+            session()->flash('message', 'An error occurred while saving the inventory item.');
+            \Log::error('Inventory save error: ' . $e->getMessage());
+        }
     }
 
     public function openDeleteModal($id)
@@ -489,10 +555,15 @@ class Masterlist extends Component
         $this->selectedItems = [];
     }
 
+    /**
+     * Ensure the current user has admin privileges.
+     *
+     * @throws \Symfony\Component\HttpFoundation\Exception\BadRequestException
+     */
     protected function ensureAdmin(): void
     {
         if (!auth()->check() || !auth()->user()->isSystemAdmin()) {
-            abort(403);
+            abort(403, 'Access denied. Admin privileges required.');
         }
     }
 

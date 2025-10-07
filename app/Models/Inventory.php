@@ -3,92 +3,238 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * Inventory Model
+ *
+ * Represents inventory items with stock management and image storage.
+ *
+ * @property int $id
+ * @property string $brand
+ * @property string $description
+ * @property string $category
+ * @property int $quantity
+ * @property string $status
+ * @property int $min_stock_level
+ * @property string|null $image_blob
+ * @property string|null $image_mime_type
+ * @property string|null $image_filename
+ * @property \Carbon\Carbon $created_at
+ * @property \Carbon\Carbon $updated_at
+ *
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Expense> $expenses
+ */
 class Inventory extends Model
 {
-    protected $fillable = ['brand', 'description', 'category', 'quantity', 'status', 'min_stock_level', 'image_blob', 'image_mime_type', 'image_filename'];
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var array<int, string>
+     */
+    protected $fillable = [
+        'brand',
+        'description',
+        'category',
+        'quantity',
+        'status',
+        'min_stock_level',
+        'image_blob',
+        'image_mime_type',
+        'image_filename'
+    ];
 
-    public function expenses()
+    /**
+     * Valid status values for inventory items.
+     */
+    public const STATUSES = ['normal', 'critical', 'out_of_stock'];
+
+    /**
+     * Valid category values for inventory items.
+     */
+    public const CATEGORIES = ['Bodega Room', 'Alchy Room'];
+
+    /**
+     * Get the expenses relationship.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany<\App\Models\Expense>
+     */
+    public function expenses(): HasMany
     {
         return $this->hasMany(Expense::class);
     }
 
-    // Auto caps lock mutators for text fields
-    public function setBrandAttribute($value)
+    /**
+     * Set the brand attribute with auto uppercase conversion.
+     *
+     * @param string|null $value
+     */
+    public function setBrandAttribute(?string $value): void
     {
         $this->attributes['brand'] = is_string($value) ? strtoupper($value) : $value;
     }
 
-    public function setDescriptionAttribute($value)
+    /**
+     * Set the description attribute with auto uppercase conversion.
+     *
+     * @param string|null $value
+     */
+    public function setDescriptionAttribute(?string $value): void
     {
         $this->attributes['description'] = is_string($value) ? strtoupper($value) : $value;
     }
 
-    public function setCategoryAttribute($value)
+    /**
+     * Set the category attribute with auto uppercase conversion.
+     *
+     * @param string|null $value
+     */
+    public function setCategoryAttribute(?string $value): void
     {
         $this->attributes['category'] = is_string($value) ? strtoupper($value) : $value;
     }
 
-    public function setStatusAttribute($value)
+    /**
+     * Set the status attribute with validation.
+     *
+     * @param string|null $value
+     */
+    public function setStatusAttribute(?string $value): void
     {
-        // Only allow valid enum values for status
-        $allowedValues = ['normal', 'critical', 'out_of_stock'];
-        if (is_string($value) && in_array(strtolower($value), $allowedValues)) {
-            $this->attributes['status'] = strtolower($value); // Keep as lowercase to match enum
+        if (is_string($value) && in_array(strtolower($value), self::STATUSES)) {
+            $this->attributes['status'] = strtolower($value);
         } else {
-            $this->attributes['status'] = $value; // Keep original value if not in allowed list
+            $this->attributes['status'] = $value;
         }
     }
 
-    // BLOB Image Methods
-    public function storeImageAsBlob($imagePath)
+    /**
+     * Store an image as base64 blob.
+     *
+     * @param string $imagePath
+     * @return bool
+     */
+    public function storeImageAsBlob(string $imagePath): bool
     {
         if (!file_exists($imagePath)) {
             return false;
         }
 
         $imageData = file_get_contents($imagePath);
-        $base64Image = base64_encode($imageData);
+        if ($imageData === false) {
+            return false;
+        }
 
-        $this->image_blob = $base64Image;
+        $this->image_blob = base64_encode($imageData);
         $this->image_mime_type = mime_content_type($imagePath);
         $this->image_filename = basename($imagePath);
 
         return $this->save();
     }
 
-    public function getImageBlobAttribute($value)
+    /**
+     * Get the image blob as data URL.
+     *
+     * @param string|null $value
+     * @return string|null
+     */
+    public function getImageBlobAttribute(?string $value): ?string
     {
         if (!$value) {
             return null;
         }
 
-        // Ensure we have MIME type
         $mimeType = $this->image_mime_type ?: 'image/jpeg';
-
         return 'data:' . $mimeType . ';base64,' . $value;
     }
 
-    public function getImageUrlAttribute()
+    /**
+     * Get the image URL (blob or fallback).
+     *
+     * @return string
+     */
+    public function getImageUrlAttribute(): string
     {
-        if ($this->image_blob) {
-            return $this->image_blob;
-        }
-
-        // Fallback to no-image placeholder
-        return asset('images/no-image.png');
+        return $this->image_blob ?: asset('images/no-image.png');
     }
 
-    public function hasImageBlob()
+    /**
+     * Check if the inventory item has an image blob.
+     *
+     * @return bool
+     */
+    public function hasImageBlob(): bool
     {
         return !empty($this->image_blob);
     }
 
-    public function deleteImageBlob()
+    /**
+     * Delete the image blob.
+     *
+     * @return bool
+     */
+    public function deleteImageBlob(): bool
     {
         $this->image_blob = null;
         $this->image_mime_type = null;
         $this->image_filename = null;
         return $this->save();
+    }
+
+    /**
+     * Check if the inventory item is in stock.
+     *
+     * @return bool
+     */
+    public function isInStock(): bool
+    {
+        return $this->quantity > 0;
+    }
+
+    /**
+     * Check if the inventory item is low on stock.
+     *
+     * @return bool
+     */
+    public function isLowStock(): bool
+    {
+        return $this->quantity > 0 && $this->quantity <= $this->min_stock_level;
+    }
+
+    /**
+     * Check if the inventory item is out of stock.
+     *
+     * @return bool
+     */
+    public function isOutOfStock(): bool
+    {
+        return $this->quantity <= 0;
+    }
+
+    /**
+     * Update the status based on current quantity.
+     *
+     * @return void
+     */
+    public function updateStatus(): void
+    {
+        if ($this->isOutOfStock()) {
+            $this->status = 'out_of_stock';
+        } elseif ($this->isLowStock()) {
+            $this->status = 'critical';
+        } else {
+            $this->status = 'normal';
+        }
+        $this->save();
+    }
+
+    /**
+     * Get the available quantity for release.
+     *
+     * @return int
+     */
+    public function getAvailableQuantity(): int
+    {
+        return max(0, $this->quantity);
     }
 }
