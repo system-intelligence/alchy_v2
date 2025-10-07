@@ -35,6 +35,14 @@ class Masterlist extends Component
     public $releaseItems = [];
     public $selectedInventoryId = null;
 
+    // Delete Inventory modal
+    public $showDeleteModal = false;
+    public $deleteInventoryId = null;
+    public $deletePassword = '';
+
+    // Edit password
+    public $editPassword = '';
+
     public function mount()
     {
         $this->loadInventories();
@@ -89,8 +97,10 @@ class Masterlist extends Component
         $this->showModal = false;
         $this->showReleaseModal = false;
         $this->showDuplicateModal = false;
+        $this->showDeleteModal = false;
         $this->resetForm();
         $this->resetReleaseForm();
+        $this->resetDeleteForm();
     }
 
     public function closeDuplicateModal()
@@ -101,7 +111,9 @@ class Masterlist extends Component
 
     public function openReleaseModal()
     {
-        $this->ensureAdmin();
+        if (!auth()->check() || (!auth()->user()->isSystemAdmin() && !auth()->user()->isUser())) {
+            abort(403);
+        }
         $this->resetReleaseForm();
         $this->showReleaseModal = true;
     }
@@ -164,6 +176,7 @@ class Masterlist extends Component
         $this->quantity = 0;
         $this->min_stock_level = 5;
         $this->image = null;
+        $this->editPassword = '';
     }
 
     public function resetReleaseForm()
@@ -173,9 +186,17 @@ class Masterlist extends Component
         $this->selectedInventoryId = null;
     }
 
+    protected function resetDeleteForm(): void
+    {
+        $this->deleteInventoryId = null;
+        $this->deletePassword = '';
+    }
+
     public function saveRelease()
     {
-        $this->ensureAdmin();
+        if (!auth()->check() || (!auth()->user()->isSystemAdmin() && !auth()->user()->isUser())) {
+            abort(403);
+        }
 
         $this->validate([
             'client_id' => 'required|exists:clients,id',
@@ -282,6 +303,18 @@ class Masterlist extends Component
             'image' => 'nullable|image|mimes:png,jpg,jpeg|max:5120',
         ]);
 
+        if ($this->editing) {
+            $this->validate([
+                'editPassword' => 'required',
+            ]);
+
+            // Check password
+            if (!\Illuminate\Support\Facades\Hash::check($this->editPassword, auth()->user()->password)) {
+                $this->addError('editPassword', 'The password is incorrect.');
+                return;
+            }
+        }
+
         $wasEditing = $this->editing;
 
         // Auto-set status based on quantity and min_stock_level
@@ -348,11 +381,28 @@ class Masterlist extends Component
         $this->closeModal();
     }
 
-    public function delete($id)
+    public function openDeleteModal($id)
+    {
+        $this->ensureAdmin();
+        $this->deleteInventoryId = $id;
+        $this->showDeleteModal = true;
+    }
+
+    public function confirmDelete()
     {
         $this->ensureAdmin();
 
-        $inventory = Inventory::find($id);
+        $this->validate([
+            'deletePassword' => 'required',
+        ]);
+
+        // Check password
+        if (!\Illuminate\Support\Facades\Hash::check($this->deletePassword, auth()->user()->password)) {
+            $this->addError('deletePassword', 'The password is incorrect.');
+            return;
+        }
+
+        $inventory = Inventory::find($this->deleteInventoryId);
         if (!$inventory) {
             session()->flash('message', 'Inventory not found.');
             return;
@@ -363,10 +413,12 @@ class Masterlist extends Component
             'user_id' => auth()->id(),
             'action' => 'delete',
             'model' => 'inventory',
-            'model_id' => $id,
+            'model_id' => $this->deleteInventoryId,
             'changes' => ['name' => $name, 'deleted' => true],
         ]);
+
         $this->loadInventories();
+        $this->closeModal();
         session()->flash('message', 'Inventory deleted successfully.');
     }
 

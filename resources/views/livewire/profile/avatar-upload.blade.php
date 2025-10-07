@@ -3,8 +3,9 @@
     <div class="flex items-center justify-center mb-8">
         <div class="relative">
             <img class="w-32 h-32 rounded-full object-cover border-4 border-white shadow-xl"
-                 src="{{ $user->avatar_url }}"
-                 alt="Current Avatar">
+                  src="{{ $user->avatar_url }}"
+                  alt="Current Avatar"
+                  onerror="this.src='https://ui-avatars.com/api/?name={{ urlencode($user->name) }}&color=7F9CF5&background=EBF4FF'">
             @if($user->hasMedia('avatar'))
                 <button wire:click="removeAvatar"
                         class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-2 hover:bg-red-600 transition-colors shadow-lg">

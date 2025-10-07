@@ -17,6 +17,7 @@
 
         <!-- Quick Stats -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+            @if(!auth()->user()->isUser())
             <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                 <div class="flex items-center">
                     <div class="p-3 bg-blue-100 dark:bg-blue-900 rounded-lg">
@@ -30,6 +31,7 @@
                     </div>
                 </div>
             </div>
+            @endif
             <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                 <div class="flex items-center">
                     <div class="p-3 bg-green-100 dark:bg-green-900 rounded-lg">
@@ -52,6 +54,7 @@
                     </div>
                 </div>
             </div>
+            @if(!auth()->user()->isUser())
             <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                 <div class="flex items-center">
                     <div class="p-3 bg-red-100 dark:bg-red-900 rounded-lg">
@@ -63,8 +66,10 @@
                     </div>
                 </div>
             </div>
+            @endif
         </div>
 
+        @if(!auth()->user()->isUser())
         <!-- Expenses Cards -->
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
             <div class="p-6 border-b border-gray-200 dark:border-gray-700">
@@ -95,7 +100,9 @@
                 </div>
             </div>
         </div>
+        @endif
 
+        @if(!auth()->user()->isUser())
         <!-- Recent Expenses -->
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
             <div class="p-6 border-b border-gray-200 dark:border-gray-700">
@@ -130,6 +137,7 @@
                 </div>
             </div>
         </div>
+        @endif
 
         <!-- Recent Inventory Items -->
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">

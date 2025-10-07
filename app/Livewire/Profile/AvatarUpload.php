@@ -34,7 +34,7 @@ class AvatarUpload extends Component
         $this->user->addMedia($this->photo->getRealPath())
             ->usingName($this->photo->getClientOriginalName())
             ->usingFileName($this->photo->getClientOriginalName())
-            ->toMediaCollection('avatar');
+            ->toMediaCollection('avatar', 'public');
 
         session()->flash('message', 'Avatar updated successfully.');
         $this->photo = null;

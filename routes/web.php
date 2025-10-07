@@ -27,6 +27,9 @@ Route::get('/history', function () {
 })->middleware(['auth'])->name('history');
 
 Route::get('/expenses', function () {
+    if (auth()->user()->isUser()) {
+        abort(403, 'Access denied');
+    }
     return view('expenses');
 })->middleware(['auth'])->name('expenses');
 

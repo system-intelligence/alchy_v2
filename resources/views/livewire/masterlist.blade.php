@@ -32,9 +32,9 @@
                 </select>
             </div>
         </div>
-        @if(auth()->user()->isSystemAdmin())
+        @if(auth()->user()->isSystemAdmin() || auth()->user()->isUser())
         <div class="flex gap-2">
-            @if(count($selectedItems) > 0)
+            @if(count($selectedItems) > 0 && auth()->user()->isSystemAdmin())
             <button wire:click="bulkDelete"
                     onclick="return confirm('Are you sure you want to delete {{ count($selectedItems) }} selected items?')"
                     class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded flex items-center gap-2">
@@ -46,10 +46,12 @@
                 <x-heroicon-o-plus class="w-4 h-4" />
                 Record Release
             </button>
+            @if(auth()->user()->isSystemAdmin())
             <button wire:click="openModal" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded flex items-center gap-2">
                 <x-heroicon-o-plus class="w-4 h-4" />
                 Add Inventory
             </button>
+            @endif
         </div>
         @endif
     </div>
@@ -113,8 +115,7 @@
                                             title="Edit">
                                         <x-heroicon-o-pencil class="w-4 h-4" />
                                     </button>
-                                    <button onclick="if(!confirm('Are you sure you want to delete this item?')) { event.stopImmediatePropagation(); return false; }"
-                                            wire:click="delete({{ $inventory->id }})"
+                                    <button wire:click="openDeleteModal({{ $inventory->id }})"
                                             class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                                             title="Delete">
                                         <x-heroicon-o-trash class="w-4 h-4" />
@@ -244,6 +245,31 @@
         </div>
     @endif
 
+    <!-- Delete Inventory Modal -->
+    @if($showDeleteModal)
+        <div class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50" id="delete-inventory-modal">
+            <div class="p-5 border w-11/12 max-w-md shadow-lg rounded-md bg-white dark:bg-gray-800">
+                <div class="mt-3">
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Delete Inventory Item</h3>
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                        Are you sure you want to delete this inventory item? This action cannot be undone.
+                    </p>
+                    <form wire:submit.prevent="confirmDelete" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Enter your password to confirm</label>
+                            <input type="password" wire:model="deletePassword" class="w-full shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none focus:shadow-outline" />
+                            @error('deletePassword') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded">Delete Item</button>
+                            <button type="button" wire:click="closeModal" class="bg-gray-500 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    @endif
+
     <!-- Modal -->
     @if($showModal)
         <div class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" id="my-modal">
@@ -322,6 +348,13 @@
                             <input wire:model="min_stock_level" type="number" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="min_stock_level">
                             @error('min_stock_level') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                         </div>
+                        @if($editing)
+                        <div class="mb-4">
+                            <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="editPassword">Enter your password to confirm</label>
+                            <input wire:model="editPassword" type="password" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="editPassword">
+                            @error('editPassword') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                        </div>
+                        @endif
                         <div class="flex items-center justify-between">
                             <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
                                 {{ $editing ? 'Update' : 'Create' }}
