@@ -119,6 +119,7 @@
     </div>
 
     @livewireScripts
+    <livewire:chat-widget />
     <script>
         document.getElementById('sidebar-toggle').addEventListener('click', function() {
             document.getElementById('sidebar').classList.toggle('-translate-x-full');
