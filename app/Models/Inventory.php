@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\InventoryStatus;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -15,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string $description
  * @property string $category
  * @property int $quantity
- * @property string $status
+ * @property \App\Enums\InventoryStatus|string $status
  * @property int $min_stock_level
  * @property string|null $image_blob
  * @property string|null $image_mime_type
@@ -47,12 +49,25 @@ class Inventory extends Model
     /**
      * Valid status values for inventory items.
      */
-    public const STATUSES = ['normal', 'critical', 'out_of_stock'];
+    public const STATUSES = [
+        InventoryStatus::NORMAL->value,
+        InventoryStatus::CRITICAL->value,
+        InventoryStatus::OUT_OF_STOCK->value,
+    ];
 
     /**
      * Valid category values for inventory items.
      */
     public const CATEGORIES = ['Bodega Room', 'Alchy Room'];
+
+    /**
+     * Attribute casting configuration.
+     *
+     * @var array<string, mixed>
+     */
+    protected $casts = [
+        'status' => InventoryStatus::class,
+    ];
 
     /**
      * Get the expenses relationship.
@@ -97,15 +112,64 @@ class Inventory extends Model
     /**
      * Set the status attribute with validation.
      *
-     * @param string|null $value
+     * @param \App\Enums\InventoryStatus|string|null $value
      */
-    public function setStatusAttribute(?string $value): void
+    public function setStatusAttribute(InventoryStatus|string|null $value): void
     {
-        if (is_string($value) && in_array(strtolower($value), self::STATUSES)) {
-            $this->attributes['status'] = strtolower($value);
-        } else {
-            $this->attributes['status'] = $value;
+        if ($value instanceof InventoryStatus) {
+            $this->attributes['status'] = $value->value;
+
+            return;
         }
+
+        if (is_string($value)) {
+            $normalized = strtolower($value);
+            $status = InventoryStatus::tryFrom($normalized);
+
+            if ($status instanceof InventoryStatus) {
+                $this->attributes['status'] = $status->value;
+
+                return;
+            }
+
+            $this->attributes['status'] = $normalized;
+
+            return;
+        }
+
+        $this->attributes['status'] = $value;
+    }
+
+    /**
+     * Scope by status enum value.
+     */
+    public function scopeStatus(Builder $query, InventoryStatus $status): Builder
+    {
+        return $query->where('status', $status->value);
+    }
+
+    /**
+     * Scope inventory with critical status.
+     */
+    public function scopeCritical(Builder $query): Builder
+    {
+        return $query->where('status', InventoryStatus::CRITICAL->value);
+    }
+
+    /**
+     * Scope inventory that is out of stock.
+     */
+    public function scopeOutOfStock(Builder $query): Builder
+    {
+        return $query->where('status', InventoryStatus::OUT_OF_STOCK->value);
+    }
+
+    /**
+     * Scope inventory requiring attention.
+     */
+    public function scopeAttention(Builder $query): Builder
+    {
+        return $query->whereIn('status', InventoryStatus::attentionValues());
     }
 
     /**
@@ -219,11 +283,11 @@ class Inventory extends Model
     public function updateStatus(): void
     {
         if ($this->isOutOfStock()) {
-            $this->status = 'out_of_stock';
+            $this->status = InventoryStatus::OUT_OF_STOCK;
         } elseif ($this->isLowStock()) {
-            $this->status = 'critical';
+            $this->status = InventoryStatus::CRITICAL;
         } else {
-            $this->status = 'normal';
+            $this->status = InventoryStatus::NORMAL;
         }
         $this->save();
     }

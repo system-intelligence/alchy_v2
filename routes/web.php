@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\WebPushController;
 use Illuminate\Support\Facades\Route;
@@ -13,11 +14,15 @@ Route::get('/dashboard', function () {
     if ($user->isDeveloper()) {
         return view('dashboard-developer');
     } elseif ($user->isSystemAdmin()) {
-        return view('dashboard-admin');
+        return redirect()->route('admin.dashboard');
     } else {
         return view('dashboard-user');
     }
 })->middleware(['auth'])->name('dashboard');
+
+Route::get('/admin/dashboard', [DashboardController::class, 'index'])
+    ->middleware(['auth'])
+    ->name('admin.dashboard');
 
 Route::get('/masterlist', function () {
     return view('masterlist');

@@ -2,13 +2,14 @@
 
 namespace App\Livewire;
 
-use Livewire\Component;
-use Livewire\WithFileUploads;
-use App\Models\Inventory;
-use App\Models\History;
+use App\Enums\InventoryStatus;
 use App\Models\Client;
 use App\Models\Expense;
+use App\Models\History;
+use App\Models\Inventory;
 use Illuminate\Database\Eloquent\Collection;
+use Livewire\Component;
+use Livewire\WithFileUploads;
 
 /**
  * Masterlist Livewire Component
@@ -283,12 +284,15 @@ class Masterlist extends Component
 
                 // Update inventory
                 $newQuantity = $inventory->quantity - $item['quantity_used'];
-                $newStatus = $newQuantity <= 0 ? 'out_of_stock' :
-                           ($newQuantity <= $inventory->min_stock_level ? 'critical' : 'normal');
+                $newStatus = $newQuantity <= 0
+                    ? InventoryStatus::OUT_OF_STOCK
+                    : ($newQuantity <= $inventory->min_stock_level
+                        ? InventoryStatus::CRITICAL
+                        : InventoryStatus::NORMAL);
 
                 $inventory->update([
                     'quantity' => max(0, $newQuantity),
-                    'status' => $newStatus,
+                    'status' => $newStatus->value,
                 ]);
 
                 $updatedInventories[] = $inventory;
@@ -318,7 +322,9 @@ class Masterlist extends Component
                     'model_id' => $inventory->id,
                     'changes' => [
                         'quantity' => $inventory->quantity,
-                        'status' => $inventory->status,
+                        'status' => $inventory->status instanceof InventoryStatus
+                            ? $inventory->status->value
+                            : $inventory->status,
                     ],
                 ]);
             }
@@ -370,8 +376,11 @@ class Masterlist extends Component
         $wasEditing = $this->editing;
 
         // Auto-set status based on quantity and min_stock_level
-        $status = $this->quantity <= 0 ? 'out_of_stock' :
-                 ($this->quantity <= $this->min_stock_level ? 'critical' : 'normal');
+        $status = $this->quantity <= 0
+            ? InventoryStatus::OUT_OF_STOCK
+            : ($this->quantity <= $this->min_stock_level
+                ? InventoryStatus::CRITICAL
+                : InventoryStatus::NORMAL);
 
         try {
             if ($this->editing) {
@@ -387,7 +396,7 @@ class Masterlist extends Component
                     'category' => $this->category,
                     'quantity' => $this->quantity,
                     'min_stock_level' => $this->min_stock_level,
-                    'status' => $status,
+                    'status' => $status->value,
                 ]);
 
                 // Log history
@@ -402,7 +411,7 @@ class Masterlist extends Component
                         'category' => $this->category,
                         'quantity' => $this->quantity,
                         'min_stock_level' => $this->min_stock_level,
-                        'status' => $status
+                        'status' => $status->value
                     ],
                 ]);
             } else {
@@ -412,7 +421,7 @@ class Masterlist extends Component
                     'category' => $this->category,
                     'quantity' => $this->quantity,
                     'min_stock_level' => $this->min_stock_level,
-                    'status' => $status,
+                    'status' => $status->value,
                 ]);
 
                 // Log history
@@ -427,7 +436,7 @@ class Masterlist extends Component
                         'category' => $this->category,
                         'quantity' => $this->quantity,
                         'min_stock_level' => $this->min_stock_level,
-                        'status' => $status
+                        'status' => $status->value
                     ],
                 ]);
             }

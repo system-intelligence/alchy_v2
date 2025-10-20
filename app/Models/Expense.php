@@ -32,7 +32,8 @@ class Expense extends Model
      */
     protected $fillable = [
         'client_id',
-        'inventory_id',
+    'inventory_id',
+    'project_id',
         'quantity_used',
         'cost_per_unit',
         'total_cost',
@@ -71,6 +72,16 @@ class Expense extends Model
     public function inventory(): BelongsTo
     {
         return $this->belongsTo(Inventory::class);
+    }
+
+    /**
+     * Get the project relationship.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo<\App\Models\Project, \App\Models\Expense>
+     */
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
     }
 
     /**

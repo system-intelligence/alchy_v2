@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Enums\InventoryStatus;
 use App\Models\Client;
 use App\Models\Expense;
 use App\Models\Inventory;
@@ -50,13 +51,13 @@ class DatabaseSeeder extends Seeder
 
         // Create sample inventory
         $inventories = [
-            ['brand' => 'Staples', 'description' => 'Standard stapler clips', 'category' => 'Office Supplies', 'quantity' => 100, 'min_stock_level' => 10, 'status' => 'normal'],
-            ['brand' => 'HP', 'description' => 'Inkjet printer cartridge', 'category' => 'Printer Supplies', 'quantity' => 50, 'min_stock_level' => 5, 'status' => 'normal'],
-            ['brand' => 'Post-It', 'description' => 'Sticky notes 3x3', 'category' => 'Office Supplies', 'quantity' => 200, 'min_stock_level' => 20, 'status' => 'normal'],
-            ['brand' => 'Dixon', 'description' => 'Ticonderoga pencils', 'category' => 'Writing Instruments', 'quantity' => 150, 'min_stock_level' => 15, 'status' => 'normal'],
-            ['brand' => 'Avery', 'description' => 'White labels 1x2.5', 'category' => 'Labels', 'quantity' => 75, 'min_stock_level' => 10, 'status' => 'normal'],
-            ['brand' => 'Brother', 'description' => 'Thermal transfer tape', 'category' => 'Printer Supplies', 'quantity' => 25, 'min_stock_level' => 5, 'status' => 'critical'],
-            ['brand' => 'Pilot', 'description' => 'G2 gel pens', 'category' => 'Writing Instruments', 'quantity' => 0, 'min_stock_level' => 5, 'status' => 'out_of_stock'],
+            ['brand' => 'Staples', 'description' => 'Standard stapler clips', 'category' => 'Office Supplies', 'quantity' => 100, 'min_stock_level' => 10, 'status' => InventoryStatus::NORMAL->value],
+            ['brand' => 'HP', 'description' => 'Inkjet printer cartridge', 'category' => 'Printer Supplies', 'quantity' => 50, 'min_stock_level' => 5, 'status' => InventoryStatus::NORMAL->value],
+            ['brand' => 'Post-It', 'description' => 'Sticky notes 3x3', 'category' => 'Office Supplies', 'quantity' => 200, 'min_stock_level' => 20, 'status' => InventoryStatus::NORMAL->value],
+            ['brand' => 'Dixon', 'description' => 'Ticonderoga pencils', 'category' => 'Writing Instruments', 'quantity' => 150, 'min_stock_level' => 15, 'status' => InventoryStatus::NORMAL->value],
+            ['brand' => 'Avery', 'description' => 'White labels 1x2.5', 'category' => 'Labels', 'quantity' => 75, 'min_stock_level' => 10, 'status' => InventoryStatus::NORMAL->value],
+            ['brand' => 'Brother', 'description' => 'Thermal transfer tape', 'category' => 'Printer Supplies', 'quantity' => 25, 'min_stock_level' => 5, 'status' => InventoryStatus::CRITICAL->value],
+            ['brand' => 'Pilot', 'description' => 'G2 gel pens', 'category' => 'Writing Instruments', 'quantity' => 0, 'min_stock_level' => 5, 'status' => InventoryStatus::OUT_OF_STOCK->value],
         ];
 
         foreach ($inventories as $inventoryData) {
@@ -80,14 +81,14 @@ class DatabaseSeeder extends Seeder
         foreach ($sampleExpenses as $expenseData) {
             $inventory = Inventory::find($expenseData['inventory_id']);
             $inventory->quantity -= $expenseData['quantity_used'];
-            if ($inventory->quantity <= 0) {
-                $inventory->quantity = 0;
-                $inventory->status = 'out_of_stock';
-            } elseif ($inventory->quantity <= 5) {
-                $inventory->status = 'critical';
-            } else {
-                $inventory->status = 'normal';
-            }
+                if ($inventory->quantity <= 0) {
+                    $inventory->quantity = 0;
+                    $inventory->status = InventoryStatus::OUT_OF_STOCK;
+                } elseif ($inventory->quantity <= 5) {
+                    $inventory->status = InventoryStatus::CRITICAL;
+                } else {
+                    $inventory->status = InventoryStatus::NORMAL;
+                }
             $inventory->save();
         }
     }

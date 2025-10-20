@@ -1,6 +1,6 @@
 <section>
     <header class="flex items-center space-x-2 mb-6">
-        <x-heroicon-o-user class="w-6 h-6 text-blue-600 dark:text-blue-400" />
+        <x-heroicon-o-user class="w-6 h-6 text-primary-500 dark:text-primary-300" />
         <div>
             <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">
                 {{ __('Profile Information') }}

@@ -1,5 +1,10 @@
 @extends('layouts.app')
 
+@php
+    use App\Enums\InventoryStatus;
+    use Illuminate\Support\Str;
+@endphp
+
 @section('content')
 <div class="space-y-6">
         <!-- Welcome Section -->
@@ -173,11 +178,19 @@
                                     <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ Str::limit($item->description, 40) }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{{ $item->quantity }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap">
-                                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full
-                                            @if($item->status == 'normal') bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200
-                                            @elseif($item->status == 'critical') bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200
-                                            @else bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 @endif">
-                                            {{ ucfirst(str_replace('_', ' ', $item->status)) }}
+                                        @php
+                                            $statusEnum = $item->status instanceof InventoryStatus
+                                                ? $item->status
+                                                : InventoryStatus::tryFrom($item->status) ?? InventoryStatus::NORMAL;
+
+                                            $statusClasses = match ($statusEnum) {
+                                                InventoryStatus::NORMAL => 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+                                                InventoryStatus::CRITICAL => 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+                                                InventoryStatus::OUT_OF_STOCK => 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+                                            };
+                                        @endphp
+                                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full {{ $statusClasses }}">
+                                            {{ ucfirst(str_replace('_', ' ', $statusEnum->value)) }}
                                         </span>
                                     </td>
                                 </tr>

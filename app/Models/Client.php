@@ -112,6 +112,16 @@ class Client extends Model
     }
 
     /**
+     * Get the projects relationship.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany<\App\Models\Project>
+     */
+    public function projects(): HasMany
+    {
+        return $this->hasMany(Project::class);
+    }
+
+    /**
      * Store an image as base64 blob.
      *
      * @param string $imagePath
@@ -192,6 +202,14 @@ class Client extends Model
     public function getTotalExpensesAttribute(): float
     {
         return $this->expenses->sum('total_cost');
+    }
+
+    /**
+     * Count active projects linked with the client.
+     */
+    public function getActiveProjectsCountAttribute(): int
+    {
+        return $this->projects->filter(fn (Project $project) => $project->isActive())->count();
     }
 
     /**

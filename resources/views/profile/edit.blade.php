@@ -24,12 +24,12 @@
             </div>
         </div>
         <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div class="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+            <div class="bg-primary-50 dark:bg-primary-900/20 p-4 rounded-lg">
                 <div class="flex items-center">
-                    <x-heroicon-o-cube class="w-8 h-8 text-blue-600 dark:text-blue-400 mr-3" />
+                    <x-heroicon-o-cube class="w-8 h-8 text-primary-500 dark:text-primary-300 mr-3" />
                     <div>
-                        <p class="text-sm text-blue-600 dark:text-blue-400">Items Managed</p>
-                        <p class="text-2xl font-bold text-blue-700 dark:text-blue-300">{{ \App\Models\Inventory::count() }}</p>
+                        <p class="text-sm text-primary-500 dark:text-primary-300">Items Managed</p>
+                        <p class="text-2xl font-bold text-primary-600 dark:text-primary-200">{{ \App\Models\Inventory::count() }}</p>
                     </div>
                 </div>
             </div>

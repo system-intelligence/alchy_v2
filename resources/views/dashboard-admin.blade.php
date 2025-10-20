@@ -1,5 +1,10 @@
 @extends('layouts.app')
 
+@php
+    use App\Enums\InventoryStatus;
+    use Illuminate\Support\Str;
+@endphp
+
 @section('content')
 <div class="space-y-6">
         <!-- Welcome Section -->
@@ -24,7 +29,7 @@
                     </div>
                     <div class="ml-4">
                         <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Total Inventory</p>
-                        <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ \App\Models\Inventory::count() }}</p>
+                        <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ $metrics['total'] }}</p>
                     </div>
                 </div>
             </div>
@@ -35,7 +40,7 @@
                     </div>
                     <div class="ml-4">
                         <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Normal Stock</p>
-                        <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ \App\Models\Inventory::where('status', 'normal')->count() }}</p>
+                        <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ $metrics['normal'] }}</p>
                     </div>
                 </div>
             </div>
@@ -46,7 +51,7 @@
                     </div>
                     <div class="ml-4">
                         <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Critical Stock</p>
-                        <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ \App\Models\Inventory::where('status', 'critical')->count() }}</p>
+                        <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ $metrics['critical'] }}</p>
                     </div>
                 </div>
             </div>
@@ -57,7 +62,7 @@
                     </div>
                     <div class="ml-4">
                         <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Out of Stock</p>
-                        <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ \App\Models\Inventory::where('status', 'out_of_stock')->count() }}</p>
+                        <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ $metrics['out_of_stock'] }}</p>
                     </div>
                 </div>
             </div>
@@ -100,7 +105,7 @@
                 </div>
                 <div class="p-6">
                     <div class="space-y-4">
-                        @forelse(\App\Models\History::where('model', 'inventory')->with('user')->latest()->take(5)->get() as $change)
+                        @forelse($recentChanges as $change)
                         <div class="flex items-center justify-between">
                             <div class="flex items-center space-x-3">
                                 <div class="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
@@ -108,7 +113,7 @@
                                 </div>
                                 <div>
                                     <p class="text-sm font-medium text-gray-900 dark:text-white">{{ ucfirst($change->action) }} inventory</p>
-                                    <p class="text-xs text-gray-500 dark:text-gray-400">by {{ $change->user->name }}</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">by {{ optional($change->user)->name ?? 'System' }}</p>
                                 </div>
                             </div>
                             <span class="text-xs text-gray-500 dark:text-gray-400">{{ $change->created_at->diffForHumans() }}</span>
@@ -143,7 +148,7 @@
                         </div>
                         <div class="flex items-center justify-between">
                             <span class="text-sm text-gray-600 dark:text-gray-400">Users</span>
-                            <span class="text-sm text-gray-900 dark:text-white">{{ \App\Models\User::count() }} active</span>
+                            <span class="text-sm text-gray-900 dark:text-white">{{ $usersCount }} active</span>
                         </div>
                         <div class="flex items-center justify-between">
                             <span class="text-sm text-gray-600 dark:text-gray-400">Last Backup</span>
@@ -159,12 +164,23 @@
             <div class="p-6 border-b border-gray-200 dark:border-gray-700">
                 <div class="flex items-center justify-between">
                     <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Low Stock Alerts</h3>
-                    <span class="text-sm text-gray-500 dark:text-gray-400">{{ \App\Models\Inventory::whereIn('status', ['critical', 'out_of_stock'])->count() }} items need attention</span>
+                    <span class="text-sm text-gray-500 dark:text-gray-400">{{ $metrics['attention'] }} items need attention</span>
                 </div>
             </div>
             <div class="p-6">
                 <div class="space-y-4">
-                    @forelse(\App\Models\Inventory::whereIn('status', ['critical', 'out_of_stock'])->latest()->take(5)->get() as $item)
+                    @forelse($lowStockItems as $item)
+                        @php
+                            $statusEnum = $item->status instanceof InventoryStatus
+                                ? $item->status
+                                : InventoryStatus::tryFrom($item->status) ?? InventoryStatus::NORMAL;
+
+                            $statusClasses = match ($statusEnum) {
+                                InventoryStatus::CRITICAL => 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+                                InventoryStatus::OUT_OF_STOCK => 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+                                default => 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
+                            };
+                        @endphp
                         <div class="flex items-center justify-between p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
                             <div class="flex items-center space-x-4">
                                 <div class="w-10 h-10 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center">
@@ -177,10 +193,8 @@
                             </div>
                             <div class="text-right">
                                 <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ $item->quantity }} remaining</p>
-                                <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full
-                                    @if($item->status == 'critical') bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200
-                                    @else bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 @endif">
-                                    {{ ucfirst(str_replace('_', ' ', $item->status)) }}
+                                <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full {{ $statusClasses }}">
+                                    {{ ucfirst(str_replace('_', ' ', $statusEnum->value)) }}
                                 </span>
                             </div>
                         </div>
@@ -216,7 +230,18 @@
                             </tr>
                         </thead>
                         <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                            @foreach(\App\Models\Inventory::latest()->take(5)->get() as $item)
+                            @foreach($recentInventory as $item)
+                            @php
+                                $statusEnum = $item->status instanceof InventoryStatus
+                                    ? $item->status
+                                    : InventoryStatus::tryFrom($item->status) ?? InventoryStatus::NORMAL;
+
+                                $statusClasses = match ($statusEnum) {
+                                    InventoryStatus::NORMAL => 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+                                    InventoryStatus::CRITICAL => 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+                                    InventoryStatus::OUT_OF_STOCK => 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+                                };
+                            @endphp
                             <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     <div class="flex items-center">
@@ -232,11 +257,8 @@
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{{ $item->category }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{{ $item->quantity }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap">
-                                    <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full
-                                        @if($item->status == 'normal') bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200
-                                        @elseif($item->status == 'critical') bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200
-                                        @else bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 @endif">
-                                        {{ ucfirst(str_replace('_', ' ', $item->status)) }}
+                                    <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full {{ $statusClasses }}">
+                                        {{ ucfirst(str_replace('_', ' ', $statusEnum->value)) }}
                                     </span>
                                 </td>
                             </tr>

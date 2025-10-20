@@ -1,3 +1,7 @@
+@php
+    use App\Enums\InventoryStatus;
+@endphp
+
 <div>
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
         <div class="flex items-center gap-2">
@@ -100,11 +104,19 @@
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ $inventory->category }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ $inventory->quantity }}</td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
-                                    @if($inventory->status == 'normal') bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200
-                                    @elseif($inventory->status == 'critical') bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200
-                                    @else bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 @endif">
-                                    {{ ucfirst(str_replace('_', ' ', $inventory->status)) }}
+                                @php
+                                    $statusEnum = $inventory->status instanceof InventoryStatus
+                                        ? $inventory->status
+                                        : InventoryStatus::tryFrom($inventory->status) ?? InventoryStatus::NORMAL;
+
+                                    $statusClasses = match ($statusEnum) {
+                                        InventoryStatus::NORMAL => 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+                                        InventoryStatus::CRITICAL => 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+                                        InventoryStatus::OUT_OF_STOCK => 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+                                    };
+                                @endphp
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $statusClasses }}">
+                                    {{ ucfirst(str_replace('_', ' ', $statusEnum->value)) }}
                                 </span>
                             </td>
                             @if(auth()->user()->isSystemAdmin())
