@@ -6,7 +6,10 @@ use App\Http\Controllers\WebPushController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    return auth()->check() ? redirect('/dashboard') : redirect('/login');
+    if (auth()->check()) {
+        return redirect('/dashboard');
+    }
+    return view('welcome');
 });
 
 Route::get('/dashboard', function () {

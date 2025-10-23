@@ -47,21 +47,14 @@
         </div>
 
         <!-- Remember Me -->
-        <div class="flex items-center justify-between">
+        <div class="flex items-center">
             <label for="remember_me" class="flex items-center">
                 <input id="remember_me"
                        type="checkbox"
-                       class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                       class="w-4 h-4 text-red-600 bg-gray-100 border-gray-300 rounded focus:ring-red-500 dark:focus:ring-red-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
                        name="remember">
                 <span class="ml-2 text-sm text-gray-600 dark:text-gray-400">Remember me</span>
             </label>
-
-            @if (Route::has('password.request'))
-                <a class="text-sm text-red-600 hover:text-red-500 dark:text-red-400 dark:hover:text-red-300 font-medium transition-colors"
-                   href="{{ route('password.request') }}">
-                    Forgot password?
-                </a>
-            @endif
         </div>
 
         <!-- Login Button -->

@@ -24,6 +24,9 @@ class Expenses extends Component
     public $selectedClient = null;
     public $clientExpenses = [];
 
+    // Main tab navigation
+    public $activeMainTab = 'clients';
+
     // Filters & search
     public $search = '';
     public $dateFrom = null;
@@ -88,6 +91,7 @@ class Expenses extends Component
     public $projectClientId = '';
     public $projectName = '';
     public $projectReference = '';
+    public $projectJobType = '';
     public $projectStatus = 'planning';
     public $projectStartDate = '';
     public $projectTargetDate = '';
@@ -119,6 +123,13 @@ class Expenses extends Component
     public $manageReleaseTime = '';
     public $manageReleaseNotes = '';
     public $manageReleaseDuplicateNotice = '';
+
+    // Project notes tab
+    public $manageProjectNotesList = [];
+    public $newNoteContent = '';
+    public $newNoteImages = [];
+    public $editingNoteId = null;
+    public $editNoteContent = '';
 
     protected static ?bool $expenseNotesSupported = null;
 
@@ -257,6 +268,7 @@ class Expenses extends Component
             $this->projectClientName = $project->client?->name ?? '';
             $this->projectName = $project->name;
             $this->projectReference = $project->reference_code ?? '';
+            $this->projectJobType = $project->job_type ?? '';
             $this->projectStatus = in_array($project->status, Project::STATUSES, true) ? $project->status : 'planning';
             $this->projectStartDate = $project->start_date?->format('Y-m-d') ?? '';
             $this->projectTargetDate = $project->target_date?->format('Y-m-d') ?? '';
@@ -285,6 +297,7 @@ class Expenses extends Component
         $this->projectClientId = '';
         $this->projectName = '';
         $this->projectReference = '';
+        $this->projectJobType = '';
         $this->projectStatus = 'planning';
         $this->projectStartDate = '';
         $this->projectTargetDate = '';
@@ -668,6 +681,8 @@ class Expenses extends Component
             $this->manageActiveTab = $previousTab;
         }
 
+        $this->loadProjectNotes();
+
         return true;
     }
 
@@ -882,11 +897,105 @@ class Expenses extends Component
         session()->flash('message', 'Project details updated successfully.');
     }
 
+    public function loadProjectNotes(): void
+    {
+        if (!$this->managingProject) {
+            $this->manageProjectNotesList = [];
+            return;
+        }
+
+        $notes = \App\Models\ProjectNote::where('project_id', $this->managingProject['id'])
+            ->with('user')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($note) {
+                return [
+                    'id' => $note->id,
+                    'content' => $note->content,
+                    'images' => $note->images ?? [],
+                    'user_name' => $note->user->name,
+                    'created_at' => $note->created_at->setTimezone('Asia/Manila')->format('M d, Y · h:i A'),
+                    'created_at_human' => $note->created_at->diffForHumans(),
+                ];
+            })->toArray();
+
+        $this->manageProjectNotesList = $notes;
+    }
+
+    public function saveProjectNote(): void
+    {
+        $this->ensureAdmin();
+
+        if (!$this->managingProject) {
+            session()->flash('message', 'Select a project before adding notes.');
+            return;
+        }
+
+        $this->validate([
+            'newNoteContent' => 'required|string|max:5000',
+        ]);
+
+        \App\Models\ProjectNote::create([
+            'project_id' => $this->managingProject['id'],
+            'user_id' => auth()->id(),
+            'content' => $this->newNoteContent,
+            'images' => $this->newNoteImages,
+        ]);
+
+        History::create([
+            'user_id' => auth()->id(),
+            'action' => 'create',
+            'model' => 'project_note',
+            'model_id' => $this->managingProject['id'],
+            'changes' => [
+                'content' => $this->newNoteContent,
+                'has_images' => !empty($this->newNoteImages),
+            ],
+        ]);
+
+        $this->newNoteContent = '';
+        $this->newNoteImages = [];
+        $this->loadProjectNotes();
+
+        session()->flash('message', 'Note added successfully.');
+    }
+
+    public function deleteProjectNote(int $noteId): void
+    {
+        $this->ensureAdmin();
+
+        $note = \App\Models\ProjectNote::find($noteId);
+        if (!$note) {
+            session()->flash('message', 'Note not found.');
+            return;
+        }
+
+        if ($note->project_id !== $this->managingProject['id']) {
+            session()->flash('message', 'Note does not belong to this project.');
+            return;
+        }
+
+        $note->delete();
+
+        History::create([
+            'user_id' => auth()->id(),
+            'action' => 'delete',
+            'model' => 'project_note',
+            'model_id' => $noteId,
+            'changes' => [
+                'project_id' => $note->project_id,
+            ],
+        ]);
+
+        $this->loadProjectNotes();
+        session()->flash('message', 'Note deleted successfully.');
+    }
+
     public function downloadProjectReceipt(int $projectId)
     {
         $this->ensureAdmin();
 
-        $project = Project::with(['client', 'expenses.inventory'])->find($projectId);
+        $project = Project::with(['client', 'expenses.inventory', 'projectNotes.user'])->find($projectId);
         if (!$project) {
             session()->flash('message', 'Project not found.');
             return null;
@@ -894,46 +1003,131 @@ class Expenses extends Component
 
         $filename = Str::slug($project->reference_code ?: $project->name ?: 'project')
             . '-receipt-' . now()->format('Ymd_His') . '.csv';
-        $includeNotes = $this->expenseNotesEnabled();
+        $includeExpenseNotes = $this->expenseNotesEnabled();
 
-        return response()->streamDownload(function () use ($project, $includeNotes) {
+        return response()->streamDownload(function () use ($project, $includeExpenseNotes) {
             $handle = fopen('php://output', 'w');
+            
+            // Use UTF-8 BOM for proper encoding in Excel
+            fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
 
-            fputcsv($handle, ['Project', $project->name]);
-            fputcsv($handle, ['Reference Code', $project->reference_code ?: 'N/A']);
-            fputcsv($handle, ['Client', $project->client->name . ' — ' . $project->client->branch]);
-            fputcsv($handle, ['Generated', now()->setTimezone('Asia/Manila')->format('M d, Y h:i A')]);
+            // Company Header
+            fputcsv($handle, ['ALCHY ENTERPRISE INC.']);
+            fputcsv($handle, ['Smart Inventory System']);
             fputcsv($handle, []);
-            $header = ['Released At', 'Item', 'Description', 'Quantity', 'Cost Per Unit', 'Total'];
-            if ($includeNotes) {
-                $header[] = 'Notes';
+            fputcsv($handle, ['PROJECT RECEIPT & MATERIAL RELEASE REPORT']);
+            fputcsv($handle, []);
+            fputcsv($handle, []);
+            
+            // Project Information Section
+            fputcsv($handle, ['PROJECT DETAILS', '', '', '', '', '']);
+            fputcsv($handle, ['Project Name', $project->name, '', '', '', '']);
+            fputcsv($handle, ['Reference Code', $project->reference_code ?: 'N/A', '', '', '', '']);
+            fputcsv($handle, ['Status', strtoupper(str_replace('_', ' ', $project->status)), '', '', '', '']);
+            fputcsv($handle, []);
+            
+            // Client Information
+            fputcsv($handle, ['CLIENT INFORMATION', '', '', '', '', '']);
+            fputcsv($handle, ['Company', $project->client->name, '', '', '', '']);
+            fputcsv($handle, ['Branch', $project->client->branch, '', '', '', '']);
+            fputcsv($handle, []);
+            
+            // Project Timeline
+            fputcsv($handle, ['PROJECT TIMELINE', '', '', '', '', '']);
+            fputcsv($handle, ['Start Date', $project->start_date ? Carbon::parse($project->start_date)->format('F d, Y') : 'Not Set', '', '', '', '']);
+            fputcsv($handle, ['Target Completion', $project->target_date ? Carbon::parse($project->target_date)->format('F d, Y') : 'Not Set', '', '', '', '']);
+            fputcsv($handle, ['Warranty Until', $project->warranty_until ? Carbon::parse($project->warranty_until)->format('F d, Y') : 'Not Set', '', '', '', '']);
+            fputcsv($handle, []);
+            
+            // Project Notes Section
+            if ($project->notes) {
+                fputcsv($handle, ['PROJECT OVERVIEW', '', '', '', '', '']);
+                $notesLines = explode("\n", $project->notes);
+                foreach ($notesLines as $line) {
+                    fputcsv($handle, [trim($line), '', '', '', '', '']);
+                }
+                fputcsv($handle, []);
+            }
+            
+            // Documentation Notes
+            if ($project->projectNotes && $project->projectNotes->count() > 0) {
+                fputcsv($handle, ['DOCUMENTATION HISTORY', '', '', '', '', '']);
+                fputcsv($handle, []);
+                fputcsv($handle, ['Date & Time', 'Documented By', 'Notes', '', '', '']);
+                
+                foreach ($project->projectNotes->sortBy('created_at') as $note) {
+                    fputcsv($handle, [
+                        $note->created_at->setTimezone('Asia/Manila')->format('M d, Y h:i A'),
+                        $note->user->name ?? 'Unknown User',
+                        str_replace(["\r\n", "\n", "\r"], ' | ', $note->content),
+                        '',
+                        '',
+                        ''
+                    ]);
+                }
+                fputcsv($handle, []);
+                fputcsv($handle, []);
+            }
+
+            // Material Releases Section
+            fputcsv($handle, ['MATERIAL RELEASES & EXPENSES BREAKDOWN', '', '', '', '', '']);
+            fputcsv($handle, []);
+            
+            // Table header with proper column structure
+            $header = ['Date & Time', 'Item Brand', 'Description', 'Quantity', 'Unit Price (₱)', 'Total (₱)'];
+            if ($includeExpenseNotes) {
+                $header[] = 'Release Notes';
             }
             fputcsv($handle, $header);
 
+            $totalAmount = 0;
+            $itemCount = 0;
+            
             foreach ($project->expenses->sortBy('released_at') as $expense) {
                 $releasedAt = $expense->released_at
                     ? $expense->released_at->setTimezone('Asia/Manila')->format('M d, Y h:i A')
-                    : '—';
+                    : 'Not Specified';
 
                 $row = [
                     $releasedAt,
                     $expense->inventory->brand ?? 'Unknown Item',
-                    $expense->inventory->description ?? '—',
-                    $expense->quantity_used,
+                    $expense->inventory->description ?? 'No Description',
+                    number_format($expense->quantity_used, 2),
                     number_format($expense->cost_per_unit, 2),
                     number_format($expense->total_cost, 2),
                 ];
 
-                if ($includeNotes) {
-                    $row[] = $expense->notes ?? '';
+                if ($includeExpenseNotes) {
+                    $row[] = $expense->notes ? str_replace(["\r\n", "\n", "\r"], ' | ', $expense->notes) : '';
                 }
 
                 fputcsv($handle, $row);
+                $totalAmount += $expense->total_cost;
+                $itemCount++;
             }
+            
+            // Summary Section with spacing
+            fputcsv($handle, []);
+            fputcsv($handle, []);
+            fputcsv($handle, ['FINANCIAL SUMMARY', '', '', '', '', '']);
+            fputcsv($handle, []);
+            fputcsv($handle, ['Total Line Items', $itemCount, '', '', '', '']);
+            fputcsv($handle, ['Total Units Released', number_format($project->expenses->sum('quantity_used'), 2), '', '', '', '']);
+            fputcsv($handle, []);
+            fputcsv($handle, ['GRAND TOTAL', '', '', '', '', number_format($totalAmount, 2)]);
+            fputcsv($handle, []);
+            fputcsv($handle, []);
+            fputcsv($handle, []);
+            
+            // Footer Section
+            fputcsv($handle, ['Document Information', '', '', '', '', '']);
+            fputcsv($handle, ['Generated On', now()->setTimezone('Asia/Manila')->format('F d, Y - h:i A'), '', '', '', '']);
+            fputcsv($handle, ['Generated By', auth()->user()->name ?? 'System', '', '', '', '']);
+            fputcsv($handle, ['System', 'Alchy Enterprise Inc. - Smart Inventory System', '', '', '', '']);
 
             fclose($handle);
         }, $filename, [
-            'Content-Type' => 'text/csv',
+            'Content-Type' => 'text/csv; charset=UTF-8',
         ]);
     }
 
@@ -984,6 +1178,7 @@ class Expenses extends Component
             'projectClientId' => 'required|exists:clients,id',
             'projectName' => 'required|string|max:255',
             'projectReference' => 'nullable|string|max:100',
+            'projectJobType' => 'required|in:installation,service',
             'projectStatus' => 'required|in:' . implode(',', Project::STATUSES),
             'projectStartDate' => 'nullable|date',
             'projectTargetDate' => 'nullable|date|after_or_equal:projectStartDate',
@@ -999,6 +1194,7 @@ class Expenses extends Component
             'client_id' => (int) $validated['projectClientId'],
             'name' => $validated['projectName'],
             'reference_code' => $this->projectReference ?: null,
+            'job_type' => $validated['projectJobType'],
             'status' => $validated['projectStatus'],
             'start_date' => $startDate,
             'target_date' => $targetDate,
@@ -1029,6 +1225,7 @@ class Expenses extends Component
                 'client_id' => $data['client_id'],
                 'name' => $data['name'],
                 'reference_code' => $data['reference_code'],
+                'job_type' => $data['job_type'],
                 'status' => $data['status'],
                 'start_date' => $startDate,
                 'target_date' => $targetDate,

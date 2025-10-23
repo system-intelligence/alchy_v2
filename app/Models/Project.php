@@ -33,6 +33,7 @@ class Project extends Model
         'client_id',
         'name',
         'reference_code',
+        'job_type',
         'status',
         'start_date',
         'target_date',
@@ -66,6 +67,14 @@ class Project extends Model
     public function expenses(): HasMany
     {
         return $this->hasMany(Expense::class);
+    }
+
+    /**
+     * Project has many notes.
+     */
+    public function projectNotes(): HasMany
+    {
+        return $this->hasMany(ProjectNote::class)->orderBy('created_at', 'desc');
     }
 
     /**

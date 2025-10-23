@@ -20,10 +20,10 @@
         <!-- Sidebar -->
         <div id="sidebar" class="bg-[#101828] shadow-xl w-64 h-full fixed inset-y-0 left-0 transform -translate-x-full lg:translate-x-0 transition-transform duration-300 ease-in-out z-30 border-r border-[#1B2537]">
             <div class="flex flex-col h-full">
-                <div class="flex items-center justify-center h-16 bg-gradient-to-r from-primary-500 to-primary-700 shadow-lg">
+                <div class="flex items-center justify-center h-20 bg-gradient-to-r from-primary-500 to-primary-700 shadow-lg">
                     <div class="flex items-center space-x-3">
-                        <div class="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-md">
-                            <x-heroicon-o-cube class="w-5 h-5 text-primary-500" />
+                        <div class="w-14 h-14 bg-white rounded-lg flex items-center justify-center shadow-md">
+                            <img src="http://192.168.1.201:8000/images/logos/alchy_logo.png" alt="Alchy Logo" class="w-10 h-10 object-contain">
                         </div>
                         <div>
                             <h1 class="text-white text-lg font-bold tracking-wide">Alchy</h1>

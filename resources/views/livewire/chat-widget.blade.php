@@ -175,7 +175,7 @@
         </div>
     @else
         @php($__totalUnread = array_sum($unreadCounts ?? []))
-        <button wire:click="toggleChat" class="relative bg-blue-500 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg hover:bg-blue-600">
+        <button wire:click="toggleChat" class="relative bg-red-500 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg hover:bg-red-600">
             <x-heroicon-o-chat-bubble-left-right class="w-7 h-7" />
             @if($__totalUnread > 0)
                 <span class="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-red-500 text-white text-xs font-semibold shadow">

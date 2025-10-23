@@ -18,6 +18,39 @@
         @endif
     </div>
 
+    <!-- Main Tabs Navigation -->
+    <div class="mb-6 border-b border-[#1B2537]">
+        <nav class="flex gap-1 overflow-x-auto">
+            <button 
+                wire:click="$set('activeMainTab', 'clients')"
+                class="relative px-6 py-3 text-sm font-semibold transition-all whitespace-nowrap {{ $activeMainTab === 'clients' ? 'text-primary-400' : 'text-gray-400 hover:text-gray-200' }}"
+            >
+                Our Clients
+                @if($activeMainTab === 'clients')
+                    <span class="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary-500 to-red-500"></span>
+                @endif
+            </button>
+            <button 
+                wire:click="$set('activeMainTab', 'projects')"
+                class="relative px-6 py-3 text-sm font-semibold transition-all whitespace-nowrap {{ $activeMainTab === 'projects' ? 'text-primary-400' : 'text-gray-400 hover:text-gray-200' }}"
+            >
+                Project Management
+                @if($activeMainTab === 'projects')
+                    <span class="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary-500 to-red-500"></span>
+                @endif
+            </button>
+            <button 
+                wire:click="$set('activeMainTab', 'receipts')"
+                class="relative px-6 py-3 text-sm font-semibold transition-all whitespace-nowrap {{ $activeMainTab === 'receipts' ? 'text-primary-400' : 'text-gray-400 hover:text-gray-200' }}"
+            >
+                Receipt Rollup
+                @if($activeMainTab === 'receipts')
+                    <span class="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary-500 to-red-500"></span>
+                @endif
+            </button>
+        </nav>
+    </div>
+
     @if($showDeleteClientModal)
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur" id="delete-client-modal">
             <div class="w-11/12 max-w-md rounded-2xl border border-[#1B2537] bg-[#121f33] p-6 shadow-2xl">
@@ -51,90 +84,17 @@
         </div>
     @endif
 
-    <div class="mb-6 rounded-2xl border border-[#1B2537] bg-[#0d1829]/80 p-5 backdrop-blur">
-        <div class="grid grid-cols-1 gap-4 md:grid-cols-5">
-            <div class="md:col-span-2">
-                <label class="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500">Search</label>
-                <div class="relative">
-                    <x-heroicon-o-magnifying-glass class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-                    <input
-                        type="text"
-                        wire:model.debounce.500ms="search"
-                        placeholder="Search client, project, inventory..."
-                        class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-9 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
-                    />
-                </div>
-            </div>
-            <div>
-                <label class="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500">From</label>
-                <input wire:model.lazy="dateFrom" type="date" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" />
-            </div>
-            <div>
-                <label class="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500">To</label>
-                <input wire:model.lazy="dateTo" type="date" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" />
-            </div>
-            <div>
-                <label class="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500">Client</label>
-                <select wire:model="clientFilter" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40">
-                    <option value="">All clients</option>
-                    @foreach($clients as $clientOption)
-                        <option value="{{ $clientOption->id }}">{{ $clientOption->name }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div>
-                <label class="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500">Project</label>
-                <select wire:model="projectFilter" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40">
-                    <option value="">All projects</option>
-                    @foreach($projectOptions as $project)
-                        <option value="{{ $project->id }}">
-                            {{ $project->name }}@if($project->client) — {{ $project->client->name }}@endif
-                        </option>
-                    @endforeach
-                </select>
-            </div>
-        </div>
-        <div class="mt-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
-                <div>
-                    <label class="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500">Client Status</label>
-                    <select wire:model="clientStatusFilter" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40">
-                        <option value="">Any client status</option>
-                        @foreach(\App\Models\Client::STATUSES as $status)
-                            <option value="{{ $status }}">{{ ucfirst(str_replace('_', ' ', $status)) }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div>
-                    <label class="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500">Project Status</label>
-                    <select wire:model="projectStatusFilter" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40">
-                        <option value="">Any project status</option>
-                        @foreach(\App\Models\Project::STATUSES as $status)
-                            <option value="{{ $status }}">{{ ucfirst(str_replace('_', ' ', $status)) }}</option>
-                        @endforeach
-                    </select>
-                </div>
-            </div>
-            <div class="flex justify-end gap-2">
-                <button type="button" wire:click="clearFilters" class="rounded-lg border border-[#1B2537] bg-[#172033] px-4 py-2 text-sm font-semibold text-gray-300 transition-colors hover:bg-[#1d2a40]">Clear</button>
-                @if(auth()->user()->isSystemAdmin())
-                    <button type="button" wire:click="openProjectModal" class="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/20 transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-600 md:hidden">
-                        <x-heroicon-o-folder-plus class="h-4 w-4" />
-                        Add Project
-                    </button>
-                @endif
-            </div>
-        </div>
-    </div>
+    <!-- Our Clients Tab -->
+    @if($activeMainTab === 'clients')
+        <!-- Summary Stats -->
+        @php
+            $clientCollection = $clients instanceof \Illuminate\Support\Collection ? $clients : collect($clients);
+            $totalClients = $clientCollection->count();
+            $activeClients = $clientCollection->filter(fn($client) => $client->status !== 'settled')->count();
+            $totalExpenses = $clientCollection->sum(fn($client) => $client->expenses->sum('total_cost'));
+        @endphp
 
-    @php
-        $clientCollection = $clients instanceof \Illuminate\Support\Collection ? $clients : collect($clients);
-        $totalClients = $clientCollection->count();
-        $activeClients = $clientCollection->filter(fn($client) => $client->status !== 'settled')->count();
-        $totalExpenses = $clientCollection->sum(fn($client) => $client->expenses->sum('total_cost'));
-    @endphp
-
-    <div class="mb-10 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div class="mb-10 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div class="rounded-2xl border border-primary-500/40 bg-primary-500/10 p-6">
             <p class="text-xs font-semibold uppercase tracking-wide text-primary-200">Total Spend</p>
             <p class="mt-2 text-2xl font-semibold text-white">₱{{ number_format($summary['total'] ?? 0, 2) }}</p>
@@ -152,325 +112,44 @@
             <p class="mt-2 text-2xl font-semibold text-white">{{ number_format($summary['count'] ?? 0) }}</p>
         </div>
     </div>
-
-    @if($projectSummaries->count())
-        <div class="mb-12 space-y-6">
-            <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                <div>
-                    <h2 class="text-xl font-semibold text-gray-100">Project Portfolio</h2>
-                    <p class="text-sm text-gray-400">Every reference code with its running total and latest releases.</p>
-                </div>
-                        <span class="inline-flex items-center rounded-full border border-[#1B2537] bg-[#121f33] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                            {{ number_format($projectSummaries->count()) }} {{ \Illuminate\Support\Str::plural('project', $projectSummaries->count()) }}
-                </span>
-            </div>
-
-            <div class="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">
-                @foreach($projectSummaries as $projectSummary)
-                    @php
-                        $statusPalette = [
-                            'planning' => 'border-sky-500/40 bg-sky-500/10 text-sky-200',
-                            'in_progress' => 'border-primary-500/40 bg-primary-500/15 text-primary-200',
-                            'completed' => 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200',
-                            'warranty' => 'border-amber-500/40 bg-amber-500/15 text-amber-200',
-                            'archived' => 'border-gray-600/40 bg-gray-600/15 text-gray-200',
-                        ];
-                        $statusClass = $statusPalette[$projectSummary->status] ?? 'border-[#1B2537] bg-[#121f33] text-gray-300';
-                        $latestExpense = $projectSummary->expenses->first();
-                        $lastReleasedAt = $latestExpense?->released_at?->setTimezone('Asia/Manila');
-                    @endphp
-                    <div class="flex h-full flex-col rounded-2xl border border-[#1B2537] bg-[#101828] p-5 shadow-lg shadow-black/20">
-                        <div class="flex flex-col gap-2">
-                            <div class="flex items-start justify-between gap-3">
-                                <div>
-                                    <p class="text-xs uppercase tracking-wide text-gray-500">Reference Code</p>
-                                    <h3 class="text-lg font-semibold text-white">{{ $projectSummary->reference_code ?? '—' }}</h3>
-                                </div>
-                                <span class="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide {{ $statusClass }}">
-                                    {{ ucfirst(str_replace('_', ' ', $projectSummary->status)) }}
-                                </span>
-                            </div>
-                            <div>
-                                <p class="text-sm font-semibold text-gray-100">{{ $projectSummary->name }}</p>
-                                <p class="text-xs text-gray-400">{{ $projectSummary->client->name }} · {{ $projectSummary->client->branch }}</p>
-                            </div>
-                        </div>
-
-                        <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
-                            <div class="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3">
-                                <p class="text-xs uppercase tracking-wide text-emerald-200">Total Spend</p>
-                                <p class="mt-1 text-lg font-semibold text-white">₱{{ number_format($projectSummary->expenses_total ?? 0, 2) }}</p>
-                            </div>
-                            <div class="rounded-xl border border-sky-500/40 bg-sky-500/10 p-3">
-                                <p class="text-xs uppercase tracking-wide text-sky-200">Expenses</p>
-                                <p class="mt-1 text-lg font-semibold text-white">{{ number_format($projectSummary->expenses_count) }}</p>
-                            </div>
-                        </div>
-
-                        <div class="mt-4 space-y-3 text-xs text-gray-400">
-                            <div class="flex items-center justify-between">
-                                <span>Last release</span>
-                                <span>{{ $lastReleasedAt ? $lastReleasedAt->diffForHumans() : '—' }}</span>
-                            </div>
-                            @if($projectSummary->warranty_until)
-                                <div class="flex items-center justify-between text-emerald-200">
-                                    <span>Warranty until</span>
-                                    <span>{{ $projectSummary->warranty_until->format('M d, Y') }}</span>
-                                </div>
-                            @endif
-                        </div>
-
-                        <div class="mt-4 space-y-2">
-                            <p class="text-xs uppercase tracking-wide text-gray-500">Latest expenses</p>
-
-                            @if($projectSummary->expenses->isNotEmpty())
-                                <div class="space-y-2">
-                                    @foreach($projectSummary->expenses->take(3) as $recentExpense)
-                                        @php
-                                            $released = $recentExpense->released_at?->setTimezone('Asia/Manila');
-                                        @endphp
-                                        <div class="flex items-start justify-between rounded-xl border border-[#1B2537] bg-[#172033] px-3 py-2 text-xs text-gray-300">
-                                            <div>
-                                                <p class="font-medium text-gray-100">{{ $recentExpense->inventory->brand ?? 'Unknown Item' }}</p>
-                                                <p class="text-[11px] text-gray-400">{{ $recentExpense->inventory->description ?? '—' }}</p>
-                                                <p class="text-[11px] text-gray-500">{{ $released ? $released->format('M d, Y · h:i A') : '—' }}</p>
-                                            </div>
-                                            <span class="text-sm font-semibold text-emerald-300">₱{{ number_format($recentExpense->total_cost, 2) }}</span>
-                                        </div>
-                                    @endforeach
-                                </div>
-                            @else
-                                <div class="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[#253248] bg-[#121f33] px-5 py-6 text-center text-xs text-gray-400">
-                                    <x-heroicon-o-cube-transparent class="h-8 w-8 text-gray-500" />
-                                    <div>
-                                        <p class="text-sm font-semibold text-gray-200">No expenses yet</p>
-                                        <p class="mt-1 text-[11px] text-gray-500">Releases recorded for this project will appear here.</p>
-                                    </div>
-                                </div>
-                            @endif
-                        </div>
-
-                        <div class="mt-auto flex flex-col gap-2 pt-5 sm:flex-row sm:justify-end">
-                            @if(auth()->user()->isSystemAdmin())
-                                <button wire:click="openProjectManager({{ $projectSummary->id }})" class="inline-flex items-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 transition-colors hover:bg-emerald-500/25">
-                                    <x-heroicon-o-wrench-screwdriver class="h-4 w-4" />
-                                    Manage Project
-                                </button>
-                            @endif
-                            <button wire:click="viewProject({{ $projectSummary->id }})" class="inline-flex items-center gap-2 rounded-lg border border-primary-500/40 bg-primary-500/15 px-4 py-2 text-sm font-semibold text-primary-100 transition-colors hover:bg-primary-500/25">
-                                <x-heroicon-o-eye class="h-4 w-4" />
-                                View Project
-                            </button>
-                        </div>
-                    </div>
-                @endforeach
-            </div>
-        </div>
     @endif
 
-    <div class="mb-12 space-y-6">
-        <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-                <h2 class="text-xl font-semibold text-gray-100">Receipt Rollup</h2>
-                <p class="text-sm text-gray-400">Grouped by client and project so you only see each location once.</p>
-            </div>
-            <span class="inline-flex items-center rounded-full border border-[#1B2537] bg-[#121f33] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                {{ number_format($filteredExpenses->count()) }} line items
-            </span>
-        </div>
-
-        @forelse($receiptGroups as $receipt)
-            @php
-                $client = $receipt['client'];
-                $projects = $receipt['projects'];
-                $latestExpense = $projects
-                    ->flatMap(fn ($project) => $project['expenses'])
-                    ->sortByDesc(fn ($expense) => $expense->released_at?->timestamp ?? 0)
-                    ->first();
-            @endphp
-            <div class="rounded-3xl border border-[#1B2537] bg-[#101828] p-6 shadow-lg shadow-black/20">
-                <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                    <div>
-                        <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Client</p>
-                        <h3 class="text-2xl font-semibold text-white">{{ $client->name }}</h3>
-                        @if($receipt['branch'])
-                            <p class="text-sm text-gray-400">{{ $receipt['branch'] }}</p>
-                        @endif
-                        <p class="mt-3 text-xs uppercase tracking-wide text-gray-500">Projects Covered</p>
-                        <p class="text-sm text-gray-300">{{ $projects->count() }} {{ \Illuminate\Support\Str::plural('group', $projects->count()) }} · {{ number_format($receipt['count']) }} items</p>
-                    </div>
-                    <div class="flex flex-col items-start gap-2 text-right md:items-end">
-                        <span class="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-200">
-                            Total ₱{{ number_format($receipt['total'], 2) }}
-                        </span>
-                        <span class="text-xs text-gray-500">Last updated {{ $latestExpense?->released_at?->setTimezone('Asia/Manila')->diffForHumans() ?? '—' }}</span>
-                    </div>
+    <!-- Our Clients Tab -->
+    @if($activeMainTab === 'clients')
+        @if($clients->count() === 0)
+            <div class="rounded-3xl border border-dashed border-gray-600/60 bg-[#172033] px-6 py-12 text-center">
+                <div class="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-primary-500/10 text-primary-300">
+                    <x-heroicon-o-building-office class="h-10 w-10" />
                 </div>
-
-                <div class="mt-6 space-y-5">
-                    @foreach($projects as $projectGroup)
-                        @php
-                            $project = $projectGroup['project'];
-                            $badgeStyles = [
-                                'planning' => 'border-sky-500/40 bg-sky-500/10 text-sky-200',
-                                'in_progress' => 'border-primary-500/40 bg-primary-500/15 text-primary-200',
-                                'completed' => 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200',
-                                'warranty' => 'border-amber-500/40 bg-amber-500/15 text-amber-200',
-                                'archived' => 'border-gray-600/40 bg-gray-600/15 text-gray-200',
-                            ];
-                            $statusClass = $badgeStyles[$projectGroup['status'] ?? ''] ?? 'border-[#1B2537] bg-[#121f33] text-gray-300';
-                        @endphp
-                        <div class="rounded-2xl border border-[#1B2537] bg-[#0d1829] p-5">
-                            <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                <div>
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <h4 class="text-lg font-semibold text-white">{{ $projectGroup['project_name'] }}</h4>
-                                        @if($projectGroup['reference_code'])
-                                            <span class="rounded-md border border-[#1B2537] bg-[#172033] px-2 py-0.5 text-[11px] uppercase tracking-widest text-gray-400">{{ $projectGroup['reference_code'] }}</span>
-                                        @endif
-                                        @if($projectGroup['status'])
-                                            <span class="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide {{ $statusClass }}">
-                                                {{ ucfirst(str_replace('_', ' ', $projectGroup['status'])) }}
-                                            </span>
-                                        @endif
-                                    </div>
-                                    @if($projectGroup['warranty_until'])
-                                        <p class="mt-2 inline-flex items-center gap-2 text-xs text-emerald-200">
-                                            <x-heroicon-o-shield-check class="h-4 w-4" />
-                                            Warranty until {{ $projectGroup['warranty_until']->format('M d, Y') }}
-                                        </p>
-                                    @endif
-                                </div>
-                                <div class="text-right">
-                                    <p class="text-xs uppercase tracking-wide text-gray-500">Group Total</p>
-                                    <p class="text-lg font-semibold text-emerald-300">₱{{ number_format($projectGroup['subtotal'], 2) }}</p>
-                                    <p class="text-xs text-gray-500">{{ number_format($projectGroup['item_count']) }} line {{ \Illuminate\Support\Str::plural('item', $projectGroup['item_count']) }}</p>
-                                </div>
-                            </div>
-
-                            <div class="mt-4 overflow-hidden rounded-xl border border-[#1B2537]">
-                                <table class="min-w-full divide-y divide-[#1B2537] text-sm text-gray-200">
-                                    <thead class="bg-[#121f33] text-xs uppercase tracking-wide text-gray-400">
-                                        <tr>
-                                            <th class="px-4 py-3 text-left">Released</th>
-                                            <th class="px-4 py-3 text-left">Client · Project</th>
-                                            <th class="px-4 py-3 text-left">Inventory</th>
-                                            <th class="px-4 py-3 text-left">Category</th>
-                                            <th class="px-4 py-3 text-left">Client Status</th>
-                                            <th class="px-4 py-3 text-left">Project Status</th>
-                                            <th class="px-4 py-3 text-left">Warranty</th>
-                                            <th class="px-4 py-3 text-right">Total</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-[#1B2537] bg-[#0d1829]">
-                                        @foreach($projectGroup['expenses'] as $expense)
-                                            @php
-                                                $inventory = optional($expense->inventory);
-                                                $releasedAt = $expense->released_at?->setTimezone('Asia/Manila');
-                                                $expenseProject = $expense->project;
-                                                $expenseClient = $expense->client;
-                                                
-                                                $projectStatusPalette = [
-                                                    'planning' => 'border-sky-500/40 bg-sky-500/10 text-sky-200',
-                                                    'in_progress' => 'border-primary-500/40 bg-primary-500/15 text-primary-200',
-                                                    'completed' => 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200',
-                                                    'warranty' => 'border-amber-500/40 bg-amber-500/15 text-amber-200',
-                                                    'archived' => 'border-gray-600/40 bg-gray-600/15 text-gray-200',
-                                                ];
-                                                $projectStatusClass = $projectStatusPalette[$expenseProject?->status ?? ''] ?? 'border-[#1B2537] bg-[#172033] text-gray-300';
-                                                
-                                                $clientStatusPalette = [
-                                                    'active' => 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200',
-                                                    'inactive' => 'border-gray-600/40 bg-gray-600/15 text-gray-200',
-                                                    'settled' => 'border-sky-500/40 bg-sky-500/10 text-sky-200',
-                                                ];
-                                                $clientStatusClass = $clientStatusPalette[$expenseClient?->status ?? ''] ?? 'border-[#1B2537] bg-[#172033] text-gray-300';
-                                            @endphp
-                                            <tr class="transition-colors hover:bg-[#121f33]">
-                                                <td class="px-4 py-2 text-sm text-gray-400 align-middle">
-                                                    <div class="whitespace-nowrap">{{ $releasedAt ? $releasedAt->format('M d, Y · h:i A') : '—' }}</div>
-                                                </td>
-                                                <td class="px-4 py-2 align-middle">
-                                                    <div class="space-y-1">
-                                                        <p class="font-semibold text-gray-100">{{ $expenseClient->name ?? 'Unknown Client' }}</p>
-                                                        <p class="text-xs text-gray-400">{{ $expenseProject?->name ?? 'No project linked' }} · {{ $expenseProject?->reference_code ?? '—' }}</p>
-                                                        @if($expenseClient?->branch)
-                                                            <p class="text-xs text-gray-500">{{ $expenseClient->branch }}</p>
-                                                        @endif
-                                                    </div>
-                                                </td>
-                                                <td class="px-4 py-2 align-middle">
-                                                    <div class="space-y-1">
-                                                        <p class="font-medium text-gray-100">{{ $inventory->brand ?? 'Unknown Item' }}</p>
-                                                        <p class="text-xs text-gray-400">{{ $inventory->description ?? '—' }}</p>
-                                                    </div>
-                                                </td>
-                                                <td class="px-4 py-2 align-middle">
-                                                    <span class="inline-flex items-center rounded-full border border-[#1B2537] bg-[#172033] px-2.5 py-1 text-xs text-gray-300">
-                                                        {{ $inventory->category ?? 'Alchy Room' }}
-                                                    </span>
-                                                </td>
-                                                <td class="px-4 py-2 align-middle">
-                                                    <span class="inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold uppercase {{ $clientStatusClass }}">
-                                                        {{ ucfirst($expenseClient?->status ?? 'active') }}
-                                                    </span>
-                                                </td>
-                                                <td class="px-4 py-2 align-middle">
-                                                    @if($expenseProject?->status)
-                                                        <span class="inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold uppercase {{ $projectStatusClass }}">
-                                                            {{ ucfirst(str_replace('_', ' ', $expenseProject->status)) }}
-                                                        </span>
-                                                    @else
-                                                        <span class="text-xs text-gray-500">—</span>
-                                                    @endif
-                                                </td>
-                                                <td class="px-4 py-2 align-middle">
-                                                    @if($expenseProject?->warranty_until)
-                                                        <div class="flex items-center gap-1.5 text-xs text-emerald-200">
-                                                            <x-heroicon-o-shield-check class="h-4 w-4 flex-shrink-0" />
-                                                            <span class="whitespace-nowrap">{{ $expenseProject->warranty_until->format('M d, Y') }}</span>
-                                                        </div>
-                                                    @else
-                                                        <span class="text-xs text-gray-500">—</span>
-                                                    @endif
-                                                </td>
-                                                <td class="px-4 py-2 text-right font-semibold text-emerald-300 align-middle">
-                                                    <div class="whitespace-nowrap">₱{{ number_format($expense->total_cost, 2) }}</div>
-                                                </td>
-                                            </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    @endforeach
+                <h3 class="mb-2 text-lg font-semibold text-white">No Clients Yet</h3>
+                @if(auth()->user()->isSystemAdmin())
+                    <p class="mb-6 text-sm text-gray-400">Add your first client to begin tracking releases, projects, and warranty coverage.</p>
+                    <button wire:click="openClientModal" class="mx-auto inline-flex items-center gap-2 rounded-xl bg-primary-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-primary-500/20 transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-600">
+                        <x-heroicon-o-user-plus class="h-4 w-4" />
+                        Add Your First Client
+                    </button>
+                @else
+                    <p class="text-sm text-gray-400">Please contact your system administrator to add clients before you can record expenses.</p>
+                @endif
+            </div>
+        @else
+            <!-- Client Cards Header -->
+            <div class="mb-6 flex items-center justify-between">
+                <div>
+                    <h2 class="text-2xl font-bold text-white">
+                        Our <span class="bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">Clients</span>
+                    </h2>
+                    <p class="mt-1 text-sm text-gray-400">{{ $clients->count() }} {{ Str::plural('client', $clients->count()) }} · {{ $clients->sum(fn($c) => $c->projects->count()) }} total {{ Str::plural('project', $clients->sum(fn($c) => $c->projects->count())) }}</p>
                 </div>
+                @if(auth()->user()->isSystemAdmin())
+                    <button wire:click="openClientModal" class="inline-flex items-center gap-2 rounded-xl bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/20 transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-600">
+                        <x-heroicon-o-user-plus class="h-4 w-4" />
+                        Add Client
+                    </button>
+                @endif
             </div>
-        @empty
-            <div class="rounded-3xl border border-dashed border-gray-600/60 bg-[#172033] px-6 py-12 text-center text-sm text-gray-400">
-                No expenses match your current filters. Adjust the filters above to see receipt details.
-            </div>
-        @endforelse
-    </div>
 
-    @if($clients->count() === 0)
-        <div class="rounded-3xl border border-dashed border-gray-600/60 bg-[#172033] px-6 py-12 text-center">
-            <div class="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-primary-500/10 text-primary-300">
-                <x-heroicon-o-building-office class="h-10 w-10" />
-            </div>
-            <h3 class="mb-2 text-lg font-semibold text-white">No Clients Yet</h3>
-            @if(auth()->user()->isSystemAdmin())
-                <p class="mb-6 text-sm text-gray-400">Add your first client to begin tracking releases, projects, and warranty coverage.</p>
-                <button wire:click="openClientModal" class="mx-auto inline-flex items-center gap-2 rounded-xl bg-primary-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-primary-500/20 transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-600">
-                    <x-heroicon-o-user-plus class="h-4 w-4" />
-                    Add Your First Client
-                </button>
-            @else
-                <p class="text-sm text-gray-400">Please contact your system administrator to add clients before you can record expenses.</p>
-            @endif
-        </div>
-    @else
-        <div class="mx-auto grid max-w-screen-2xl grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            <div class="mx-auto grid max-w-screen-2xl grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
             @foreach($clients as $client)
                 @php
                     $projectCount = $client->projects->count();
@@ -581,9 +260,317 @@
                 </div>
             @endforeach
         </div>
+        @endif
     @endif
 
-    <div class="mt-10 rounded-2xl border border-[#1B2537] bg-[#0d1829]">
+    <!-- Project Management Tab -->
+        @if($activeMainTab === 'projects')
+            @if($projectSummaries->count())
+                <div class="mb-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">
+                            Project <span class="bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">Management</span>
+                        </h2>
+                        <p class="mt-1 text-sm text-gray-400">Every reference code with its running total and latest releases</p>
+                    </div>
+                    <span class="inline-flex items-center rounded-full border border-[#1B2537] bg-[#121f33] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                        {{ number_format($projectSummaries->count()) }} {{ \Illuminate\Support\Str::plural('project', $projectSummaries->count()) }}
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">
+                    @foreach($projectSummaries as $projectSummary)
+                        @php
+                            $statusPalette = [
+                                'planning' => 'border-sky-500/40 bg-sky-500/10 text-sky-200',
+                                'in_progress' => 'border-primary-500/40 bg-primary-500/15 text-primary-200',
+                                'completed' => 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200',
+                                'warranty' => 'border-amber-500/40 bg-amber-500/15 text-amber-200',
+                                'archived' => 'border-gray-600/40 bg-gray-600/15 text-gray-200',
+                            ];
+                            $statusClass = $statusPalette[$projectSummary->status] ?? 'border-[#1B2537] bg-[#121f33] text-gray-300';
+                            $latestExpense = $projectSummary->expenses->first();
+                            $lastReleasedAt = $latestExpense?->released_at?->setTimezone('Asia/Manila');
+                        @endphp
+                        <div class="flex h-full flex-col rounded-2xl border border-[#1B2537] bg-[#101828] p-5 shadow-lg shadow-black/20">
+                            <div class="flex flex-col gap-2">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="flex-1 min-w-0">
+                                        <span class="inline-block rounded-md border border-[#1B2537] bg-[#172033] px-2 py-0.5 text-[10px] uppercase tracking-widest text-gray-400 mb-2">
+                                            {{ $projectSummary->reference_code ?? 'NO-REF' }}
+                                        </span>
+                                        <h3 class="text-xl font-bold text-white mb-1">{{ $projectSummary->name }}</h3>
+                                        <p class="text-sm text-gray-400">{{ $projectSummary->client->name }} · {{ $projectSummary->client->branch }}</p>
+                                        <span class="mt-2 inline-flex items-center rounded-full border border-[#1B2537] bg-[#172033] px-3 py-1 text-xs font-medium capitalize text-gray-300">
+                                            <x-heroicon-o-wrench-screwdriver class="mr-1 h-3 w-3" />
+                                            {{ $projectSummary->job_type ?? 'not specified' }}
+                                        </span>
+                                    </div>
+                                    <span class="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide {{ $statusClass }} flex-shrink-0">
+                                        {{ ucfirst(str_replace('_', ' ', $projectSummary->status)) }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
+                                <div class="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3">
+                                    <p class="text-xs uppercase tracking-wide text-emerald-200">Total Spend</p>
+                                    <p class="mt-1 text-lg font-semibold text-white">₱{{ number_format($projectSummary->expenses_total ?? 0, 2) }}</p>
+                                </div>
+                                <div class="rounded-xl border border-sky-500/40 bg-sky-500/10 p-3">
+                                    <p class="text-xs uppercase tracking-wide text-sky-200">Expenses</p>
+                                    <p class="mt-1 text-lg font-semibold text-white">{{ number_format($projectSummary->expenses_count) }}</p>
+                                </div>
+                            </div>
+
+                            <div class="mt-4 space-y-3 text-xs text-gray-400">
+                                <div class="flex items-center justify-between">
+                                    <span>Last release</span>
+                                    <span>{{ $lastReleasedAt ? $lastReleasedAt->diffForHumans() : '—' }}</span>
+                                </div>
+                                @if($projectSummary->warranty_until)
+                                    <div class="flex items-center justify-between text-emerald-200">
+                                        <span>Warranty until</span>
+                                        <span>{{ $projectSummary->warranty_until->format('M d, Y') }}</span>
+                                    </div>
+                                @endif
+                            </div>
+
+                            <div class="mt-4 space-y-2">
+                                <p class="text-xs uppercase tracking-wide text-gray-500">Latest expenses</p>
+
+                                @if($projectSummary->expenses->isNotEmpty())
+                                    <div class="space-y-2">
+                                        @foreach($projectSummary->expenses->take(3) as $recentExpense)
+                                            @php
+                                                $released = $recentExpense->released_at?->setTimezone('Asia/Manila');
+                                            @endphp
+                                            <div class="flex items-start justify-between rounded-xl border border-[#1B2537] bg-[#172033] px-3 py-2 text-xs text-gray-300">
+                                                <div>
+                                                    <p class="font-medium text-gray-100">{{ $recentExpense->inventory->brand ?? 'Unknown Item' }}</p>
+                                                    <p class="text-[11px] text-gray-400">{{ $recentExpense->inventory->description ?? '—' }}</p>
+                                                    <p class="text-[11px] text-gray-500">{{ $released ? $released->format('M d, Y · h:i A') : '—' }}</p>
+                                                </div>
+                                                <span class="text-sm font-semibold text-emerald-300">₱{{ number_format($recentExpense->total_cost, 2) }}</span>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                @else
+                                    <div class="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[#253248] bg-[#121f33] px-5 py-6 text-center text-xs text-gray-400">
+                                        <x-heroicon-o-cube-transparent class="h-8 w-8 text-gray-500" />
+                                        <div>
+                                            <p class="text-sm font-semibold text-gray-200">No expenses yet</p>
+                                            <p class="mt-1 text-[11px] text-gray-500">Releases recorded for this project will appear here.</p>
+                                        </div>
+                                    </div>
+                                @endif
+                            </div>
+
+                            <div class="mt-auto flex flex-col gap-2 pt-5 sm:flex-row sm:justify-end">
+                                @if(auth()->user()->isSystemAdmin())
+                                    <button wire:click="openProjectManager({{ $projectSummary->id }})" class="inline-flex items-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 transition-colors hover:bg-emerald-500/25">
+                                        <x-heroicon-o-wrench-screwdriver class="h-4 w-4" />
+                                        Manage Project
+                                    </button>
+                                @endif
+                                <button wire:click="viewProject({{ $projectSummary->id }})" class="inline-flex items-center gap-2 rounded-lg border border-primary-500/40 bg-primary-500/15 px-4 py-2 text-sm font-semibold text-primary-100 transition-colors hover:bg-primary-500/25">
+                                    <x-heroicon-o-eye class="h-4 w-4" />
+                                    View Project
+                                </button>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
+        @endif
+
+        <!-- Receipt Rollup Tab -->
+        @if($activeMainTab === 'receipts')
+            <div class="mb-6 space-y-6">
+                <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">
+                            Receipt <span class="bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">Rollup</span>
+                        </h2>
+                        <p class="mt-1 text-sm text-gray-400">Grouped by client and project so you only see each location once.</p>
+                    </div>
+                    <span class="inline-flex items-center rounded-full border border-[#1B2537] bg-[#121f33] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                        {{ number_format($filteredExpenses->count()) }} line items
+                    </span>
+                </div>
+
+                @forelse($receiptGroups as $receipt)
+                    @php
+                        $client = $receipt['client'];
+                        $projects = $receipt['projects'];
+                        $latestExpense = $projects
+                            ->flatMap(fn ($project) => $project['expenses'])
+                            ->sortByDesc(fn ($expense) => $expense->released_at?->timestamp ?? 0)
+                            ->first();
+                    @endphp
+                    <div class="rounded-3xl border border-[#1B2537] bg-[#101828] p-6 shadow-lg shadow-black/20">
+                        <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                            <div>
+                                <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Client</p>
+                                <h3 class="text-2xl font-semibold text-white">{{ $client->name }}</h3>
+                                @if($receipt['branch'])
+                                    <p class="text-sm text-gray-400">{{ $receipt['branch'] }}</p>
+                                @endif
+                                <p class="mt-3 text-xs uppercase tracking-wide text-gray-500">Projects Covered</p>
+                                <p class="text-sm text-gray-300">{{ $projects->count() }} {{ \Illuminate\Support\Str::plural('group', $projects->count()) }} · {{ number_format($receipt['count']) }} items</p>
+                            </div>
+                            <div class="flex flex-col items-start gap-2 text-right md:items-end">
+                                <span class="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-200">
+                                    Total ₱{{ number_format($receipt['total'], 2) }}
+                                </span>
+                                <span class="text-xs text-gray-500">Last updated {{ $latestExpense?->released_at?->setTimezone('Asia/Manila')->diffForHumans() ?? '—' }}</span>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 space-y-5">
+                            @foreach($projects as $projectGroup)
+                                @php
+                                    $project = $projectGroup['project'];
+                                    $badgeStyles = [
+                                        'planning' => 'border-sky-500/40 bg-sky-500/10 text-sky-200',
+                                        'in_progress' => 'border-primary-500/40 bg-primary-500/15 text-primary-200',
+                                        'completed' => 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200',
+                                        'warranty' => 'border-amber-500/40 bg-amber-500/15 text-amber-200',
+                                        'archived' => 'border-gray-600/40 bg-gray-600/15 text-gray-200',
+                                    ];
+                                    $statusClass = $badgeStyles[$projectGroup['status'] ?? ''] ?? 'border-[#1B2537] bg-[#121f33] text-gray-300';
+                                @endphp
+                                <div class="rounded-2xl border border-[#1B2537] bg-[#0d1829] p-5">
+                                    <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                        <div>
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <h4 class="text-lg font-semibold text-white">{{ $projectGroup['project_name'] }}</h4>
+                                                @if($projectGroup['reference_code'])
+                                                    <span class="rounded-md border border-[#1B2537] bg-[#172033] px-2 py-0.5 text-[11px] uppercase tracking-widest text-gray-400">{{ $projectGroup['reference_code'] }}</span>
+                                                @endif
+                                                @if($projectGroup['status'])
+                                                    <span class="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide {{ $statusClass }}">
+                                                        {{ ucfirst(str_replace('_', ' ', $projectGroup['status'])) }}
+                                                    </span>
+                                                @endif
+                                            </div>
+                                            @if($projectGroup['warranty_until'])
+                                                <p class="mt-2 inline-flex items-center gap-2 text-xs text-emerald-200">
+                                                    <x-heroicon-o-shield-check class="h-4 w-4" />
+                                                    Warranty until {{ $projectGroup['warranty_until']->format('M d, Y') }}
+                                                </p>
+                                            @endif
+                                        </div>
+                                        <div class="text-right">
+                                            <p class="text-xs uppercase tracking-wide text-gray-500">Group Total</p>
+                                            <p class="text-lg font-semibold text-emerald-300">₱{{ number_format($projectGroup['subtotal'], 2) }}</p>
+                                            <p class="text-xs text-gray-500">{{ number_format($projectGroup['item_count']) }} line {{ \Illuminate\Support\Str::plural('item', $projectGroup['item_count']) }}</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-4 overflow-hidden rounded-xl border border-[#1B2537]">
+                                        <table class="min-w-full divide-y divide-[#1B2537] text-sm text-gray-200">
+                                            <thead class="bg-[#121f33] text-xs uppercase tracking-wide text-gray-400">
+                                                <tr>
+                                                    <th class="px-4 py-3 text-left">Released</th>
+                                                    <th class="px-4 py-3 text-left">Client · Project</th>
+                                                    <th class="px-4 py-3 text-left">Inventory</th>
+                                                    <th class="px-4 py-3 text-left">Location</th>
+                                                    <th class="px-4 py-3 text-left">Client Status</th>
+                                                    <th class="px-4 py-3 text-left">Project Status</th>
+                                                    <th class="px-4 py-3 text-left">Warranty</th>
+                                                    <th class="px-4 py-3 text-right">Total</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-[#1B2537] bg-[#0d1829]">
+                                                @foreach($projectGroup['expenses'] as $expense)
+                                                    @php
+                                                        $inventory = optional($expense->inventory);
+                                                        $releasedAt = $expense->released_at?->setTimezone('Asia/Manila');
+                                                        $expenseProject = $expense->project;
+                                                        $expenseClient = $expense->client;
+                                                        
+                                                        $projectStatusPalette = [
+                                                            'planning' => 'border-sky-500/40 bg-sky-500/10 text-sky-200',
+                                                            'in_progress' => 'border-primary-500/40 bg-primary-500/15 text-primary-200',
+                                                            'completed' => 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200',
+                                                            'warranty' => 'border-amber-500/40 bg-amber-500/15 text-amber-200',
+                                                            'archived' => 'border-gray-600/40 bg-gray-600/15 text-gray-200',
+                                                        ];
+                                                        $projectStatusClass = $projectStatusPalette[$expenseProject?->status ?? ''] ?? 'border-[#1B2537] bg-[#172033] text-gray-300';
+                                                        
+                                                        $clientStatusPalette = [
+                                                            'in_progress' => 'border-primary-500/40 bg-primary-500/15 text-primary-200',
+                                                            'settled' => 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200',
+                                                            'cancelled' => 'border-red-500/40 bg-red-500/15 text-red-200',
+                                                        ];
+                                                        $clientStatusClass = $clientStatusPalette[$expenseClient?->status ?? ''] ?? 'border-[#1B2537] bg-[#172033] text-gray-300';
+                                                    @endphp
+                                                    <tr class="transition-colors hover:bg-[#121f33]">
+                                                        <td class="px-4 py-2 text-sm text-gray-400 align-middle">
+                                                            {{ $releasedAt ? $releasedAt->format('M d, Y') : '—' }}
+                                                        </td>
+                                                        <td class="px-4 py-2 align-middle">
+                                                            <div>
+                                                                <p class="font-semibold text-gray-100">{{ $expenseClient?->name ?? '—' }}</p>
+                                                                @if($expenseClient?->branch)
+                                                                    <p class="text-xs text-gray-400">{{ $expenseClient->branch }}</p>
+                                                                @endif
+                                                            </div>
+                                                        </td>
+                                                        <td class="px-4 py-2 align-middle">
+                                                            <div>
+                                                                <p class="font-medium text-gray-100">{{ $inventory->brand ?? '—' }}</p>
+                                                                <p class="text-xs text-gray-400">{{ $inventory->description ?? '—' }}</p>
+                                                            </div>
+                                                        </td>
+                                                        <td class="px-4 py-2 align-middle">
+                                                            <p class="text-sm text-gray-300">{{ $inventory->location ?? '—' }}</p>
+                                                        </td>
+                                                        <td class="px-4 py-2 align-middle">
+                                                            <span class="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide {{ $clientStatusClass }}">
+                                                                {{ ucfirst(str_replace('_', ' ', $expenseClient?->status ?? 'unknown')) }}
+                                                            </span>
+                                                        </td>
+                                                        <td class="px-4 py-2 align-middle">
+                                                            @if($expenseProject?->status)
+                                                                <span class="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide {{ $projectStatusClass }}">
+                                                                    {{ ucfirst(str_replace('_', ' ', $expenseProject->status)) }}
+                                                                </span>
+                                                            @else
+                                                                <span class="text-xs text-gray-500">—</span>
+                                                            @endif
+                                                        </td>
+                                                        <td class="px-4 py-2 align-middle">
+                                                            @if($expenseProject?->warranty_until)
+                                                                <span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/15 px-3 py-1 text-xs text-emerald-200">
+                                                                    <x-heroicon-o-shield-check class="h-3 w-3" />
+                                                                    {{ $expenseProject->warranty_until->format('M d, Y') }}
+                                                                </span>
+                                                            @else
+                                                                <span class="text-xs text-gray-500">—</span>
+                                                            @endif
+                                                        </td>
+                                                        <td class="px-4 py-2 text-right font-semibold text-emerald-300 align-middle">
+                                                            ₱{{ number_format($expense->total_cost, 2) }}
+                                                        </td>
+                                                    </tr>
+                                                @endforeach
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @empty
+                    <div class="rounded-3xl border border-dashed border-gray-600/60 bg-[#172033] px-6 py-12 text-center text-sm text-gray-400">
+                        No expenses match your current filters. Adjust the filters above to see receipt details.
+                    </div>
+                @endforelse
+            </div>
+
+            <div class="mt-10 rounded-2xl border border-[#1B2537] bg-[#0d1829]">
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-[#1B2537] text-sm text-gray-200">
                 <thead class="bg-[#121f33] text-xs uppercase tracking-wide text-gray-400">
@@ -689,6 +676,7 @@
             </table>
         </div>
     </div>
+        @endif
 
     @if($selectedClient)
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur p-4" id="expenses-modal">
@@ -704,8 +692,9 @@
                     </button>
                 </div>
 
-                <div class="mt-6 grid gap-6 lg:grid-cols-[420px,1fr]">
-                    <div class="space-y-6 rounded-2xl border border-[#1B2537] bg-[#0d1829] p-6">
+                <div class="mt-6 space-y-6">
+                    <!-- Calendar Section - Full Width Centered -->
+                    <div class="rounded-2xl border border-[#1B2537] bg-[#0d1829] p-6 mx-auto max-w-5xl">
                         <div class="flex items-center justify-between">
                             <button wire:click="changeMonth('prev')" class="rounded-full bg-[#172033] p-3 text-gray-300 transition-colors duration-200 hover:bg-primary-500/20">
                                 <x-heroicon-o-chevron-left class="h-6 w-6" />
@@ -846,7 +835,7 @@
                             @endfor
                         </div>
 
-                        <div class="flex flex-wrap items-center justify-center gap-3">
+                        <div class="flex flex-wrap items-center justify-center gap-3 mt-6">
                             <button wire:click="applyMonthFilter" class="rounded-full border border-primary-500/40 bg-primary-500/15 px-6 py-2 text-sm font-semibold text-primary-100 transition-colors duration-200 hover:bg-primary-500/25">
                                 Filter by Month
                             </button>
@@ -889,13 +878,15 @@
                         </div>
                     </div>
 
-                    @php
-                        $groupedClientExpenses = collect($clientExpenses)
-                            ->groupBy(fn ($expense) => $expense->project_id ?: 'unassigned')
-                            ->sortByDesc(fn ($group) => $group->sum('total_cost'));
-                    @endphp
+                    <!-- Expenses List - Full Width Below Calendar -->
+                    <div class="space-y-6">
+                        @php
+                            $groupedClientExpenses = collect($clientExpenses)
+                                ->groupBy(fn ($expense) => $expense->project_id ?: 'unassigned')
+                                ->sortByDesc(fn ($group) => $group->sum('total_cost'));
+                        @endphp
 
-                    @forelse($groupedClientExpenses as $projectId => $expensesGroup)
+                        @forelse($groupedClientExpenses as $projectId => $expensesGroup)
                         @php
                             $project = optional($expensesGroup->first()->project);
                             $subtotal = $expensesGroup->sum('total_cost');
@@ -1014,11 +1005,12 @@
                                 </table>
                             </div>
                         </div>
-                    @empty
-                        <div class="rounded-2xl border border-dashed border-gray-600/60 bg-[#172033] px-6 py-12 text-center text-sm text-gray-400">
-                            No expenses recorded for this client yet.
-                        </div>
-                    @endforelse
+                        @empty
+                            <div class="rounded-2xl border border-dashed border-gray-600/60 bg-[#172033] px-6 py-12 text-center text-sm text-gray-400">
+                                No expenses recorded for this client yet.
+                            </div>
+                        @endforelse
+                    </div>
                 </div>
             </div>
         </div>
@@ -1085,6 +1077,7 @@
                         $tabs = [
                             'release' => ['label' => 'Release Materials', 'icon' => 'cube-transparent'],
                             'update' => ['label' => 'Update Project', 'icon' => 'pencil-square'],
+                            'notes' => ['label' => 'Notes', 'icon' => 'document-duplicate'],
                             'receipts' => ['label' => 'Printable Receipt', 'icon' => 'document-text'],
                         ];
                     @endphp
@@ -1102,6 +1095,9 @@
                                     @break
                                 @case('pencil-square')
                                     <x-heroicon-o-pencil-square class="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+                                    @break
+                                @case('document-duplicate')
+                                    <x-heroicon-o-document-duplicate class="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
                                     @break
                                 @case('document-text')
                                     <x-heroicon-o-document-text class="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
@@ -1418,6 +1414,73 @@
                             </div>
                         </form>
                     </div>
+                @elseif($manageActiveTab === 'notes')
+                    <div class="mt-4 sm:mt-6 grid gap-4 sm:gap-5 lg:grid-cols-2">
+                        <!-- Column 1: Add New Note Form -->
+                        <div class="rounded-xl sm:rounded-2xl border border-[#1B2537] bg-[#101828] p-4 sm:p-5">
+                            <h4 class="text-sm sm:text-base font-semibold text-white">Add Project Note</h4>
+                            <p class="mt-1 text-[11px] sm:text-xs text-gray-400">Document changes, updates, or important details about this project.</p>
+
+                            <form wire:submit.prevent="saveProjectNote" class="mt-3 sm:mt-4 space-y-4">
+                                <div>
+                                    <label class="mb-1.5 sm:mb-2 block text-xs sm:text-sm font-medium text-gray-300">Note Content</label>
+                                    <textarea rows="8" wire:model.defer="newNoteContent" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-100 placeholder-gray-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" placeholder="Enter your note here..."></textarea>
+                                    @error('newNoteContent') <span class="text-xs text-red-400">{{ $message }}</span> @enderror
+                                </div>
+
+                                <div class="flex justify-end">
+                                    <button type="submit" class="inline-flex items-center gap-1.5 sm:gap-2 rounded-lg sm:rounded-xl bg-primary-500 px-4 sm:px-5 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold text-white shadow-lg shadow-primary-500/20 transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-600">
+                                        <x-heroicon-o-plus class="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+                                        Add Note
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Column 2: Notes List -->
+                        <div class="rounded-xl sm:rounded-2xl border border-[#1B2537] bg-[#101828] p-4 sm:p-5">
+                            <h4 class="text-sm sm:text-base font-semibold text-white mb-4">Project Notes ({{ count($manageProjectNotesList) }})</h4>
+
+                            <div class="max-h-[600px] overflow-y-auto pr-2">
+                                @forelse($manageProjectNotesList as $note)
+                                    <div class="mb-4 rounded-lg border border-[#1B2537] bg-[#0d1829] p-4">
+                                        <div class="flex items-start justify-between">
+                                            <div class="flex-1">
+                                                <div class="flex items-center gap-2">
+                                                    <span class="inline-flex items-center gap-1 rounded-full bg-primary-500/10 px-2 py-0.5 text-[10px] font-medium text-primary-200">
+                                                        <x-heroicon-o-user class="h-3 w-3" />
+                                                        {{ $note['user_name'] }}
+                                                    </span>
+                                                    <span class="text-[10px] text-gray-500">{{ $note['created_at_human'] }}</span>
+                                                </div>
+                                                <p class="mt-2 text-sm text-gray-200 whitespace-pre-wrap">{{ $note['content'] }}</p>
+                                                
+                                                @if(!empty($note['images']))
+                                                    <div class="mt-3 grid grid-cols-2 gap-2">
+                                                        @foreach($note['images'] as $image)
+                                                            <img src="{{ $image }}" alt="Note image" class="rounded-lg border border-[#1B2537] object-cover h-32 w-full">
+                                                        @endforeach
+                                                    </div>
+                                                @endif
+                                            </div>
+                                            <button wire:click="deleteProjectNote({{ $note['id'] }})" class="ml-3 rounded-lg bg-red-500/10 p-2 text-red-400 transition-colors hover:bg-red-500/20 hover:text-red-300">
+                                                <x-heroicon-o-trash class="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                        <p class="mt-2 text-[10px] text-gray-500">{{ $note['created_at'] }}</p>
+                                    </div>
+                                @empty
+                                    <div class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-[#253248] bg-[#121f33] px-5 py-8 text-center">
+                                        <x-heroicon-o-document-duplicate class="h-10 w-10 text-gray-500" />
+                                        <div>
+                                            <p class="text-sm font-semibold text-gray-200">No notes yet</p>
+                                            <p class="mt-1 text-xs text-gray-500">Add your first note to start documenting project updates.</p>
+                                        </div>
+                                    </div>
+                                @endforelse
+                            </div>
+                        </div>
+                    </div>
                 @else
                     <div class="mt-4 sm:mt-6 grid gap-4 sm:gap-5 lg:grid-cols-[3fr,2fr]">
                         <div class="rounded-xl sm:rounded-2xl border border-[#1B2537] bg-[#101828] p-4 sm:p-5">
@@ -1689,6 +1752,15 @@
                             <label class="mb-2 block text-sm font-medium text-gray-300">Warranty Until</label>
                             <input wire:model.defer="projectWarrantyUntil" type="date" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" />
                             @error('projectWarrantyUntil') <span class="text-xs text-red-400">{{ $message }}</span> @enderror
+                        </div>
+                        <div>
+                            <label class="mb-2 block text-sm font-medium text-gray-300">Job Type</label>
+                            <select wire:model="projectJobType" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40">
+                                <option value="">Select job type...</option>
+                                <option value="installation">Installation</option>
+                                <option value="service">Service</option>
+                            </select>
+                            @error('projectJobType') <span class="text-xs text-red-400">{{ $message }}</span> @enderror
                         </div>
                         <div>
                             <label class="mb-2 block text-sm font-medium text-gray-300">Status</label>
