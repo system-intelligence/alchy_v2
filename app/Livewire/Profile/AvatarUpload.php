@@ -31,19 +31,23 @@ class AvatarUpload extends Component
             'photo' => 'image|max:1024', // 1MB Max
         ]);
 
-        $this->user->addMedia($this->photo->getRealPath())
-            ->usingName($this->photo->getClientOriginalName())
-            ->usingFileName($this->photo->getClientOriginalName())
-            ->toMediaCollection('avatar', 'public');
+        // Store avatar as BLOB in database
+        $result = $this->user->storeAvatarAsBlob($this->photo->getRealPath());
 
-        session()->flash('message', 'Avatar updated successfully.');
-        $this->photo = null;
+        if ($result) {
+            session()->flash('message', 'Avatar updated successfully.');
+            $this->photo = null;
+            $this->user = $this->user->fresh(); // Reload user data
+        } else {
+            session()->flash('error', 'Failed to save avatar.');
+        }
     }
 
     public function removeAvatar()
     {
-        $this->user->clearMediaCollection('avatar');
+        $this->user->deleteAvatarBlob();
         session()->flash('message', 'Avatar removed successfully.');
+        $this->user = $this->user->fresh(); // Reload user data
     }
 
     public function setDragOver($value)

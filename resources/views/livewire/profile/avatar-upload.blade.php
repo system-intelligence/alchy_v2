@@ -6,7 +6,7 @@
                   src="{{ $user->avatar_url }}"
                   alt="Current Avatar"
                   onerror="this.src='https://ui-avatars.com/api/?name={{ urlencode($user->name) }}&color=7F9CF5&background=EBF4FF'">
-            @if($user->hasMedia('avatar'))
+            @if($user->hasAvatarBlob())
                 <button wire:click="removeAvatar"
                         class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-2 hover:bg-red-600 transition-colors shadow-lg">
                     <x-heroicon-o-x-mark class="w-5 h-5" />

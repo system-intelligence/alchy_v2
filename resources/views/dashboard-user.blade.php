@@ -15,7 +15,7 @@
                     <p class="text-purple-100 mt-1">Here is a quick overview of your recent activity</p>
                 </div>
                 <div class="hidden md:block">
-                    @if(auth()->user()->avatar_url && !str_contains(auth()->user()->avatar_url, 'ui-avatars.com'))
+                    @if(auth()->user()->hasAvatarBlob())
                         <img src="{{ auth()->user()->avatar_url }}" alt="{{ auth()->user()->name }}" class="w-16 h-16 rounded-full object-cover border-4 border-purple-300 shadow-lg">
                     @else
                         <div class="w-16 h-16 bg-purple-500 rounded-full flex items-center justify-center border-4 border-purple-300 shadow-lg">

@@ -31,7 +31,7 @@
                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
                     <td class="px-6 py-4 whitespace-nowrap">
                         <div class="flex items-center">
-                            @if($user->avatar_url && !str_contains($user->avatar_url, 'ui-avatars.com'))
+                            @if($user->hasAvatarBlob())
                                 <img src="{{ $user->avatar_url }}" alt="Avatar" class="w-8 h-8 rounded-full object-cover">
                                 @else
                                 <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">

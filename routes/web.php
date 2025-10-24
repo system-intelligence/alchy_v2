@@ -3,7 +3,11 @@
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\WebPushController;
+use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Route;
+
+// Broadcasting authentication routes for Pusher private channels
+Broadcast::routes(['middleware' => ['auth']]);
 
 Route::get('/', function () {
     if (auth()->check()) {

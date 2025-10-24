@@ -116,7 +116,7 @@
                         </div>
                     </div>
                     <div class="flex items-center space-x-2">
-                        @if(auth()->user()->avatar_url && !str_contains(auth()->user()->avatar_url, 'ui-avatars.com'))
+                        @if(auth()->user()->hasAvatarBlob())
                             <img src="{{ auth()->user()->avatar_url }}" alt="Avatar" class="w-8 h-8 rounded-full object-cover">
                         @else
                             <div class="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center">

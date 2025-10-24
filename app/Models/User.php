@@ -130,13 +130,27 @@ class User extends Authenticatable implements HasMedia
     }
 
     /**
-     * Register media collections for the user.
+     * Store avatar as base64 blob.
+     *
+     * @param string $imagePath
+     * @return bool
      */
-    public function registerMediaCollections(): void
+    public function storeAvatarAsBlob(string $imagePath): bool
     {
-        $this->addMediaCollection('avatar')
-            ->singleFile()
-            ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+        if (!file_exists($imagePath)) {
+            return false;
+        }
+
+        $imageData = file_get_contents($imagePath);
+        if ($imageData === false) {
+            return false;
+        }
+
+        $this->avatar_blob = base64_encode($imageData);
+        $this->avatar_mime_type = mime_content_type($imagePath);
+        $this->avatar_filename = basename($imagePath);
+
+        return $this->save();
     }
 
     /**
@@ -170,13 +184,51 @@ class User extends Authenticatable implements HasMedia
     }
 
     /**
-     * Get the user's avatar URL.
+     * Get the avatar blob as data URL.
+     *
+     * @param string|null $value
+     * @return string|null
+     */
+    public function getAvatarBlobAttribute(?string $value): ?string
+    {
+        if (!$value) {
+            return null;
+        }
+
+        $mimeType = $this->avatar_mime_type ?: 'image/jpeg';
+        return 'data:' . $mimeType . ';base64,' . $value;
+    }
+
+    /**
+     * Get the user's avatar URL (blob or fallback).
      *
      * @return string
      */
     public function getAvatarUrlAttribute(): string
     {
-        return $this->getFirstMediaUrl('avatar')
-            ?: 'https://ui-avatars.com/api/?name=' . urlencode($this->name) . '&color=7F9CF5&background=EBF4FF';
+        return $this->avatar_blob ?: 'https://ui-avatars.com/api/?name=' . urlencode($this->name) . '&color=7F9CF5&background=EBF4FF';
+    }
+
+    /**
+     * Check if the user has an avatar blob.
+     *
+     * @return bool
+     */
+    public function hasAvatarBlob(): bool
+    {
+        return !empty($this->avatar_blob);
+    }
+
+    /**
+     * Delete the avatar blob.
+     *
+     * @return bool
+     */
+    public function deleteAvatarBlob(): bool
+    {
+        $this->avatar_blob = null;
+        $this->avatar_mime_type = null;
+        $this->avatar_filename = null;
+        return $this->save();
     }
 }

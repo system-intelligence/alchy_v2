@@ -50,19 +50,17 @@ class MessageSent implements ShouldBroadcastNow
     }
 
     /**
-     * Minify payload for the frontend and include sender metadata
+     * Broadcast payload with complete message data
      */
     public function broadcastWith(): array
     {
         return [
-            'message' => [
-                'id' => $this->message->id,
-                'user_id' => $this->message->user_id,
-                'recipient_id' => $this->message->recipient_id,
-                'message' => $this->message->message,
-                'created_at' => optional($this->message->created_at)->toISOString(),
-                'user_name' => optional($this->message->user)->name,
-            ],
+            'user_id' => $this->message->user_id,
+            'recipient_id' => $this->message->recipient_id,
+            'message' => $this->message->message,
+            'user_name' => optional($this->message->user)->name ?? 'Unknown User',
+            'created_at' => optional($this->message->created_at)->toISOString(),
+            'message_id' => $this->message->id,
         ];
     }
 

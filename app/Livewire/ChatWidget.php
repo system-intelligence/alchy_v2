@@ -27,10 +27,16 @@ class ChatWidget extends Component
     public function mount()
     {
         $this->loadUsers();
+        $this->loadUnreadCounts();
+    }
 
+    public function loadUnreadCounts()
+    {
         // Initialize unread counters for currently available users
         foreach ($this->users as $u) {
-            $this->unreadCounts[$u->id] = $this->unreadCounts[$u->id] ?? 0;
+            if (!isset($this->unreadCounts[$u->id])) {
+                $this->unreadCounts[$u->id] = 0;
+            }
         }
     }
 
@@ -59,7 +65,7 @@ class ChatWidget extends Component
             $this->unreadCounts[$this->selectedUser->id] = 0;
         }
 
-        $this->lastMessageCheck = now(); // Set initial timestamp for new conversation
+        $this->lastMessageCheck = now();
         $this->loadMessages();
         $this->dispatch('userSelected', $userId);
     }
@@ -86,7 +92,7 @@ class ChatWidget extends Component
                     $this->dispatch('new-message-notification', [
                         'message' => "New message from {$message->user->name}",
                         'type' => 'info',
-                        'duration' => 4000
+                        'duration' => 5000
                     ]);
 
                     // Also emit browser notification if supported
@@ -115,36 +121,52 @@ class ChatWidget extends Component
             return;
         }
 
-        $message = Chat::create([
-            'user_id' => auth()->id(),
-            'recipient_id' => $this->selectedUser->id,
-            'message' => $this->newMessage,
-        ]);
-
-        $this->newMessage = '';
-
-        // Broadcast the message
-        broadcast(new \App\Events\MessageSent($message))->toOthers();
-
-        // Push notification (Web Push) to recipient if subscribed
         try {
-            if ($this->selectedUser) {
-                $this->selectedUser->notify(new NewMessagePush($message));
+            $message = Chat::create([
+                'user_id' => auth()->id(),
+                'recipient_id' => $this->selectedUser->id,
+                'message' => trim($this->newMessage),
+            ]);
+
+            // Load relationships for broadcasting
+            $message->load(['user', 'recipient']);
+
+            $this->newMessage = '';
+
+            // Broadcast the message
+            try {
+                broadcast(new \App\Events\MessageSent($message))->toOthers();
+            } catch (\Throwable $e) {
+                \Log::error('Message broadcast failed: ' . $e->getMessage());
             }
+
+            // Push notification (Web Push) to recipient if subscribed
+            try {
+                if ($this->selectedUser) {
+                    $this->selectedUser->notify(new NewMessagePush($message));
+                }
+            } catch (\Throwable $e) {
+                \Log::warning('NewMessagePush notify failed: ' . $e->getMessage());
+            }
+
+            $this->loadMessages();
+
+            // Emit events for UI updates
+            $this->dispatch('messagesLoaded');
+            $this->dispatch('messages-updated');
+            $this->dispatch('message-sent-notification', [
+                'message' => 'Message sent successfully!',
+                'type' => 'success',
+                'duration' => 5000
+            ]);
         } catch (\Throwable $e) {
-            \Log::warning('NewMessagePush notify failed: ' . $e->getMessage());
+            \Log::error('Failed to send message: ' . $e->getMessage());
+            $this->dispatch('message-sent-notification', [
+                'message' => 'Failed to send message. Please try again.',
+                'type' => 'error',
+                'duration' => 3000
+            ]);
         }
-
-        $this->loadMessages();
-
-        // Emit events for UI updates
-        $this->dispatch('messagesLoaded');
-        $this->dispatch('messages-updated');
-        $this->dispatch('message-sent-notification', [
-            'message' => 'Message sent successfully!',
-            'type' => 'success',
-            'duration' => 2000
-        ]);
     }
 
     public function updatedSearch()
@@ -172,22 +194,39 @@ class ChatWidget extends Component
             return;
         }
 
+        // Ensure sender exists in users list
+        if ($senderId) {
+            $senderExists = $this->users->contains('id', $senderId);
+            if (!$senderExists) {
+                $this->loadUsers();
+            }
+        }
+
         // If chat is open with the sender, refresh messages; otherwise increment unread count
         if ($this->isOpen && $this->selectedUser && $this->selectedUser->id == $senderId) {
+            // Reload messages to show the new message
             $this->loadMessages();
             $this->dispatch('messagesLoaded');
             $this->dispatch('messages-updated');
         } else {
             if ($senderId) {
-                $this->unreadCounts[$senderId] = ($this->unreadCounts[$senderId] ?? 0) + 1;
+                // Initialize if not exists
+                if (!isset($this->unreadCounts[$senderId])) {
+                    $this->unreadCounts[$senderId] = 0;
+                }
+                $this->unreadCounts[$senderId]++;
+                
+                // Force UI update
+                $this->dispatch('$refresh');
             }
 
             $senderName = $payload['user_name'] ?? 'Someone';
-            // Toast notification
+            $messageText = $payload['message'] ?? '';
+            // Toast notification with message preview
             $this->dispatch('new-message-notification', [
-                'message' => "New message from {$senderName}",
+                'message' => $senderName . ': ' . $messageText,
                 'type' => 'info',
-                'duration' => 4000
+                'duration' => 5000
             ]);
 
             // Browser notification hook
