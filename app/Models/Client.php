@@ -54,7 +54,7 @@ class Client extends Model
         return [
             'start_date' => 'date',
             'end_date' => 'date',
-        ];
+        ]; 
     }
 
     /**
@@ -96,7 +96,7 @@ class Client extends Model
     {
         if (is_string($value) && in_array(strtolower($value), self::JOB_TYPES)) {
             $this->attributes['job_type'] = strtolower($value);
-        } else {
+        } else {                
             $this->attributes['job_type'] = $value;
         }
     }

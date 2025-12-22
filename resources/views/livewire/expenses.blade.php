@@ -78,6 +78,53 @@
         </div>
     @endif
 
+    <!-- Delete Project Modal -->
+    @if($showDeleteProjectModal)
+        <div class="fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur" id="delete-project-modal">
+            <div class="w-11/12 max-w-md rounded-2xl border border-[#1B2537] bg-[#121f33] p-6 shadow-2xl">
+                <div class="space-y-4">
+                    <div class="flex items-center gap-3">
+                        <span class="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/10 text-red-300">
+                            <x-heroicon-o-exclamation-triangle class="h-5 w-5" />
+                        </span>
+                        <h3 class="text-lg font-semibold text-white">Delete Project</h3>
+                    </div>
+                    <p class="text-sm text-gray-400">Deleting this project will permanently remove all associated records. This action cannot be undone.</p>
+                    @if($deleteProjectData)
+                        <div class="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                            <h4 class="text-sm font-semibold text-red-200 mb-3">Data to be deleted:</h4>
+                            <div class="space-y-2 text-sm text-gray-300">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-gray-400">Expenses:</span>
+                                    <span class="font-semibold text-red-200">{{ $deleteProjectData['expense_count'] }}</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-gray-400">Notes:</span>
+                                    <span class="font-semibold text-red-200">{{ $deleteProjectData['note_count'] }}</span>
+                                </div>
+                                <div class="flex justify-between items-center pt-2 border-t border-red-500/20">
+                                    <span class="text-gray-400">Total Value:</span>
+                                    <span class="font-semibold text-red-200">₱{{ sprintf('%.2f', $deleteProjectData['total_expenses']) }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+                    <form wire:submit.prevent="confirmDeleteProject" class="space-y-4">
+                        <div>
+                            <label class="mb-1 block text-sm font-medium text-gray-300">Enter your password to confirm</label>
+                            <input type="password" wire:model="deleteProjectPassword" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/40" />
+                            @error('deleteProjectPassword') <span class="text-xs text-red-400">{{ $message }}</span> @enderror
+                        </div>
+                        <div class="flex items-center justify-end gap-3">
+                            <button type="button" wire:click="closeModal" class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 transition-colors hover:bg-gray-700/40">Cancel</button>
+                            <button type="submit" class="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-red-600/30 transition-colors hover:bg-red-700">Delete Project</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    @endif
+
     @if (session()->has('message'))
         <div class="mb-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
             {{ session('message') }}
@@ -164,7 +211,6 @@
                         'in_progress' => 'border-primary-500/40 bg-primary-500/15 text-primary-200',
                         'completed' => 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200',
                         'warranty' => 'border-amber-500/40 bg-amber-500/15 text-amber-200',
-                        'archived' => 'border-gray-600/40 bg-gray-600/15 text-gray-200',
                     ];
                 @endphp
                 <div class="flex min-h-48 flex-col rounded-2xl border border-[#1B2537] bg-[#121f33] p-5 shadow-lg shadow-black/20 transition-transform duration-200 hover:-translate-y-1 hover:shadow-xl">
@@ -199,34 +245,12 @@
 
                     <div class="mt-4 space-y-3 text-sm text-gray-300">
                         <div class="flex flex-wrap items-center gap-2">
-                            <span class="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide
-                                @if($client->status == 'settled') border-emerald-500/40 bg-emerald-500/15 text-emerald-200 @else border-primary-500/40 bg-primary-500/15 text-primary-200 @endif">
-                                {{ ucfirst(str_replace('_', ' ', $client->status)) }}
-                            </span>
                             @if($client->job_type)
                                 <span class="rounded-full bg-[#172033] px-3 py-1 text-xs font-medium capitalize text-gray-300">{{ $client->job_type }}</span>
                             @endif
                             <span class="rounded-full bg-[#172033] px-3 py-1 text-xs font-medium text-gray-300">{{ $client->expenses->count() }} expenses</span>
                             <span class="rounded-full bg-[#172033] px-3 py-1 text-xs font-medium text-gray-300">{{ $projectCount }} {{ \Illuminate\Support\Str::plural('project', $projectCount) }}</span>
                         </div>
-                        @if($client->start_date || $client->end_date)
-                            <div class="flex flex-col gap-1 text-xs text-gray-400">
-                                @if($client->start_date)
-                                    <span class="flex items-center gap-1"><x-heroicon-o-calendar class="h-4 w-4" />Started {{ $client->start_date->format('M d, Y') }}</span>
-                                @endif
-                                @if($client->end_date)
-                                    <span class="flex items-center gap-1"><x-heroicon-o-calendar class="h-4 w-4" />Ended {{ $client->end_date->format('M d, Y') }}</span>
-                                @endif
-                            </div>
-                        @endif
-                        @if($upcomingWarranty && $upcomingWarranty->warranty_until)
-                            <div class="flex flex-wrap items-center gap-2 text-xs text-emerald-200">
-                                <span class="inline-flex items-center gap-2 rounded-full border border-emerald-500/40 bg-emerald-500/15 px-3 py-1">
-                                    <x-heroicon-o-shield-check class="h-4 w-4" />
-                                    Warranty until {{ $upcomingWarranty->warranty_until->format('M d, Y') }}
-                                </span>
-                            </div>
-                        @endif
                         @if($recentProjects->isNotEmpty())
                             <div class="flex flex-wrap gap-2 text-xs text-gray-400">
                                 @foreach($recentProjects as $project)
@@ -286,7 +310,6 @@
                                 'in_progress' => 'border-primary-500/40 bg-primary-500/15 text-primary-200',
                                 'completed' => 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200',
                                 'warranty' => 'border-amber-500/40 bg-amber-500/15 text-amber-200',
-                                'archived' => 'border-gray-600/40 bg-gray-600/15 text-gray-200',
                             ];
                             $statusClass = $statusPalette[$projectSummary->status] ?? 'border-[#1B2537] bg-[#121f33] text-gray-300';
                             $latestExpense = $projectSummary->expenses->first();
@@ -324,6 +347,18 @@
                             </div>
 
                             <div class="mt-4 space-y-3 text-xs text-gray-400">
+                                @if($projectSummary->start_date)
+                                    <div class="flex items-center justify-between">
+                                        <span>Start date</span>
+                                        <span>{{ $projectSummary->start_date->format('M d, Y') }}</span>
+                                    </div>
+                                @endif
+                                @if($projectSummary->target_date)
+                                    <div class="flex items-center justify-between">
+                                        <span>Target end date</span>
+                                        <span>{{ $projectSummary->target_date->format('M d, Y') }}</span>
+                                    </div>
+                                @endif
                                 <div class="flex items-center justify-between">
                                     <span>Last release</span>
                                     <span>{{ $lastReleasedAt ? $lastReleasedAt->diffForHumans() : '—' }}</span>
@@ -436,7 +471,6 @@
                                         'in_progress' => 'border-primary-500/40 bg-primary-500/15 text-primary-200',
                                         'completed' => 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200',
                                         'warranty' => 'border-amber-500/40 bg-amber-500/15 text-amber-200',
-                                        'archived' => 'border-gray-600/40 bg-gray-600/15 text-gray-200',
                                     ];
                                     $statusClass = $badgeStyles[$projectGroup['status'] ?? ''] ?? 'border-[#1B2537] bg-[#121f33] text-gray-300';
                                 @endphp
@@ -452,6 +486,14 @@
                                                     <span class="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide {{ $statusClass }}">
                                                         {{ ucfirst(str_replace('_', ' ', $projectGroup['status'])) }}
                                                     </span>
+                                                @endif
+                                            </div>
+                                            <div class="mt-2 flex flex-wrap items-center gap-4 text-xs text-gray-400">
+                                                @if($projectGroup['start_date'])
+                                                    <span>Start: {{ $projectGroup['start_date']->format('M d, Y') }}</span>
+                                                @endif
+                                                @if($projectGroup['target_date'])
+                                                    <span>Target: {{ $projectGroup['target_date']->format('M d, Y') }}</span>
                                                 @endif
                                             </div>
                                             @if($projectGroup['warranty_until'])
@@ -476,7 +518,6 @@
                                                     <th class="px-4 py-3 text-left">Client · Project</th>
                                                     <th class="px-4 py-3 text-left">Inventory</th>
                                                     <th class="px-4 py-3 text-left">Location</th>
-                                                    <th class="px-4 py-3 text-left">Client Status</th>
                                                     <th class="px-4 py-3 text-left">Project Status</th>
                                                     <th class="px-4 py-3 text-left">Warranty</th>
                                                     <th class="px-4 py-3 text-right">Total</th>
@@ -495,16 +536,8 @@
                                                             'in_progress' => 'border-primary-500/40 bg-primary-500/15 text-primary-200',
                                                             'completed' => 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200',
                                                             'warranty' => 'border-amber-500/40 bg-amber-500/15 text-amber-200',
-                                                            'archived' => 'border-gray-600/40 bg-gray-600/15 text-gray-200',
                                                         ];
                                                         $projectStatusClass = $projectStatusPalette[$expenseProject?->status ?? ''] ?? 'border-[#1B2537] bg-[#172033] text-gray-300';
-                                                        
-                                                        $clientStatusPalette = [
-                                                            'in_progress' => 'border-primary-500/40 bg-primary-500/15 text-primary-200',
-                                                            'settled' => 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200',
-                                                            'cancelled' => 'border-red-500/40 bg-red-500/15 text-red-200',
-                                                        ];
-                                                        $clientStatusClass = $clientStatusPalette[$expenseClient?->status ?? ''] ?? 'border-[#1B2537] bg-[#172033] text-gray-300';
                                                     @endphp
                                                     <tr class="transition-colors hover:bg-[#121f33]">
                                                         <td class="px-4 py-2 text-sm text-gray-400 align-middle">
@@ -525,12 +558,7 @@
                                                             </div>
                                                         </td>
                                                         <td class="px-4 py-2 align-middle">
-                                                            <p class="text-sm text-gray-300">{{ $inventory->location ?? '—' }}</p>
-                                                        </td>
-                                                        <td class="px-4 py-2 align-middle">
-                                                            <span class="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide {{ $clientStatusClass }}">
-                                                                {{ ucfirst(str_replace('_', ' ', $expenseClient?->status ?? 'unknown')) }}
-                                                            </span>
+                                                            <p class="text-sm text-gray-300">{{ $inventory->category ?? '—' }}</p>
                                                         </td>
                                                         <td class="px-4 py-2 align-middle">
                                                             @if($expenseProject?->status)
@@ -578,10 +606,8 @@
                         <th class="px-4 py-3 text-left">Released</th>
                         <th class="px-4 py-3 text-left">Client · Project</th>
                         <th class="px-4 py-3 text-left">Inventory</th>
-                        <th class="px-4 py-3 text-left">Category</th>
-                        <th class="px-4 py-3 text-left">Client Status</th>
+                        <th class="px-4 py-3 text-left">Location</th>
                         <th class="px-4 py-3 text-left">Project Status</th>
-                        <th class="px-4 py-3 text-left">Warranty</th>
                         <th class="px-4 py-3 text-right">Total</th>
                         <th class="px-4 py-3 text-right"></th>
                     </tr>
@@ -596,7 +622,6 @@
                                 'in_progress' => 'border-primary-500/40 bg-primary-500/15 text-primary-200',
                                 'completed' => 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200',
                                 'warranty' => 'border-amber-500/40 bg-amber-500/15 text-amber-200',
-                                'archived' => 'border-gray-600/40 bg-gray-600/15 text-gray-200',
                             ];
                             $clientStatusColors = [
                                 'in_progress' => 'border-primary-500/40 bg-primary-500/15 text-primary-200',
@@ -627,15 +652,7 @@
                             <td class="px-4 py-3">
                                 <span class="inline-flex items-center gap-2 rounded-md border border-[#1B2537] bg-[#172033] px-3 py-1 text-xs text-gray-300">
                                     <span class="h-1.5 w-1.5 rounded-full bg-primary-400"></span>
-                                    {{ ucwords(strtolower($expense->inventory->category)) }}
-                                </span>
-                            </td>
-                            <td class="px-4 py-3">
-                                @php
-                                    $clientBadge = $clientStatusColors[$expense->client->status] ?? 'border-[#1B2537] bg-[#172033] text-gray-300';
-                                @endphp
-                                <span class="inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide {{ $clientBadge }}">
-                                    {{ ucfirst(str_replace('_', ' ', $expense->client->status)) }}
+                                    {{ $expense->inventory->category ?? '—' }}
                                 </span>
                             </td>
                             <td class="px-4 py-3">
@@ -650,16 +667,6 @@
                                     <span class="text-xs text-gray-500">—</span>
                                 @endif
                             </td>
-                            <td class="px-4 py-3">
-                                @if($project && $project->warranty_until)
-                                    <span class="inline-flex items-center gap-2 rounded-full border border-emerald-500/40 bg-emerald-500/15 px-3 py-1 text-xs text-emerald-200">
-                                        <x-heroicon-o-shield-check class="h-4 w-4" />
-                                        {{ $project->warranty_until->format('M d, Y') }}
-                                    </span>
-                                @else
-                                    <span class="text-xs text-gray-500">—</span>
-                                @endif
-                            </td>
                             <td class="whitespace-nowrap px-4 py-3 text-right font-semibold text-gray-100">₱{{ number_format($expense->total_cost, 2) }}</td>
                             <td class="whitespace-nowrap px-4 py-3 text-right">
                                 <button type="button" wire:click="viewExpenses({{ $expense->client_id }})" class="inline-flex items-center gap-2 rounded-lg border border-[#1B2537] px-3 py-1 text-xs font-semibold text-gray-300 transition-colors hover:bg-primary-500/15 hover:text-primary-200">
@@ -669,7 +676,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="9" class="px-4 py-12 text-center text-sm text-gray-400">No expenses match your current filters.</td>
+                            <td colspan="7" class="px-4 py-12 text-center text-sm text-gray-400">No expenses match your current filters.</td>
                         </tr>
                     @endforelse
                 </tbody>
@@ -895,7 +902,6 @@
                                 'in_progress' => 'border-primary-500/40 bg-primary-500/15 text-primary-200',
                                 'completed' => 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200',
                                 'warranty' => 'border-amber-500/40 bg-amber-500/15 text-amber-200',
-                                'archived' => 'border-gray-600/40 bg-gray-600/15 text-gray-200',
                             ];
                             $statusClass = $statusPalette[$project->status ?? ''] ?? 'border-[#1B2537] bg-[#172033] text-gray-300';
                         @endphp
@@ -1025,7 +1031,6 @@
                         'in_progress' => 'border-primary-500/40 bg-primary-500/15 text-primary-200',
                         'completed' => 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200',
                         'warranty' => 'border-amber-500/40 bg-amber-500/15 text-amber-200',
-                        'archived' => 'border-gray-600/40 bg-gray-600/15 text-gray-200',
                     ];
                     $manageStatusClass = $manageStatusPalette[$managingProject['status'] ?? ''] ?? 'border-[#1B2537] bg-[#121f33] text-gray-300';
                     $firstRelease = !empty($manageProjectMetrics['first_release']) ? \Illuminate\Support\Carbon::parse($manageProjectMetrics['first_release'])->setTimezone('Asia/Manila') : null;
@@ -1042,9 +1047,9 @@
                             {{ ucfirst(str_replace('_', ' ', $managingProject['status'])) }}
                         </span>
                         <button wire:click="downloadProjectReceipt({{ $managingProject['id'] }})" class="inline-flex items-center justify-center gap-2 rounded-xl border border-sky-500/40 bg-sky-500/15 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-sky-100 transition-colors hover:bg-sky-500/25">
-                            <x-heroicon-o-arrow-down-tray class="h-4 w-4 flex-shrink-0" />
-                            <span class="hidden sm:inline">Download Receipt</span>
-                            <span class="sm:hidden">Download</span>
+                            <x-heroicon-o-document-text class="h-4 w-4 flex-shrink-0" />
+                            <span class="hidden sm:inline">Download PDF</span>
+                            <span class="sm:hidden">PDF</span>
                         </button>
                         <button wire:click="closeProjectManageModal" class="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-600 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-gray-300 transition-colors hover:bg-gray-700/40">
                             <x-heroicon-o-x-mark class="h-4 w-4 flex-shrink-0" />
@@ -1413,6 +1418,25 @@
                                 </button>
                             </div>
                         </form>
+
+                        <!-- Danger Zone -->
+                        <div class="mt-6 sm:mt-8 rounded-xl sm:rounded-2xl border border-red-500/40 bg-red-500/5 p-4 sm:p-5">
+                            <div class="flex items-start gap-3 sm:gap-4">
+                                <span class="flex h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0 items-center justify-center rounded-lg sm:rounded-xl bg-red-500/10 text-red-300">
+                                    <x-heroicon-o-exclamation-triangle class="h-4 w-4 sm:h-5 sm:w-5" />
+                                </span>
+                                <div class="flex-1 min-w-0">
+                                    <h4 class="text-sm sm:text-base font-semibold text-white">Danger Zone</h4>
+                                    <p class="mt-1 text-[11px] sm:text-xs text-gray-400">Permanently delete this project and all associated data. This action cannot be undone.</p>
+                                    <div class="mt-3 sm:mt-4">
+                                        <button wire:click="openDeleteProjectModal({{ $managingProject['id'] }})" class="inline-flex items-center gap-1.5 sm:gap-2 rounded-lg border border-red-500/40 bg-red-500/15 px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-red-200 transition-colors hover:bg-red-500/25">
+                                            <x-heroicon-o-trash class="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+                                            Delete Project
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 @elseif($manageActiveTab === 'notes')
                     <div class="mt-4 sm:mt-6 grid gap-4 sm:gap-5 lg:grid-cols-2">
@@ -1484,8 +1508,8 @@
                 @else
                     <div class="mt-4 sm:mt-6 grid gap-4 sm:gap-5 lg:grid-cols-[3fr,2fr]">
                         <div class="rounded-xl sm:rounded-2xl border border-[#1B2537] bg-[#101828] p-4 sm:p-5">
-                            <h4 class="text-sm sm:text-base font-semibold text-white">Printable Receipt Preview</h4>
-                            <p class="mt-1 text-[11px] sm:text-xs text-gray-400">Use the export button above to download a CSV that you can open in Excel or Google Sheets for printing.</p>
+                            <h4 class="text-sm sm:text-base font-semibold text-white">Official PDF Receipt</h4>
+                            <p class="mt-1 text-[11px] sm:text-xs text-gray-400">Download a professional PDF receipt with official watermark and security features. Opens in your browser for direct printing.</p>
 
                             <div class="mt-3 space-y-2 sm:space-y-3 text-xs text-gray-300">
                                 <div class="rounded-lg sm:rounded-xl border border-[#1B2537] bg-[#121f33] p-3 sm:p-4">
@@ -1499,19 +1523,20 @@
                                     <p class="text-[11px] sm:text-xs text-gray-400 truncate">{{ $managingProject['client']['branch'] }}</p>
                                 </div>
                                 <div class="rounded-lg sm:rounded-xl border border-[#1B2537] bg-[#121f33] p-3 sm:p-4">
-                                    <p class="text-[10px] sm:text-xs uppercase tracking-wide text-gray-500">Export Hints</p>
+                                    <p class="text-[10px] sm:text-xs uppercase tracking-wide text-gray-500">PDF Features</p>
                                     <ul class="mt-2 space-y-1 text-[10px] sm:text-xs text-gray-400">
-                                        <li>- Open the CSV in Excel, then use the built-in "Format as Table" for quick styling.</li>
-                                        <li>- Include your company letterhead before printing for a polished receipt.</li>
-                                        <li>- The time values are converted to Asia/Manila for easy cross-checking.</li>
+                                        <li>✓ Official watermark for authenticity</li>
+                                        <li>✓ Secure format prevents unauthorized editing</li>
+                                        <li>✓ Professional layout ready for printing</li>
+                                        <li>✓ All times displayed in Asia/Manila timezone</li>
                                     </ul>
                                 </div>
                             </div>
                         </div>
 
                         <div class="rounded-xl sm:rounded-2xl border border-[#1B2537] bg-[#101828] p-4 sm:p-5 text-xs text-gray-300">
-                            <h5 class="text-xs sm:text-sm font-semibold text-white">Need an actual PDF?</h5>
-                            <p class="mt-2 text-[11px] sm:text-xs text-gray-400">Export the CSV, open it in Excel or Google Sheets, and use "Save as PDF" for a printable receipt while retaining your branding.</p>
+                            <h5 class="text-xs sm:text-sm font-semibold text-white">Document Security</h5>
+                            <p class="mt-2 text-[11px] sm:text-xs text-gray-400">PDF receipts include an official watermark and timestamp to prevent tampering. The document will open in your browser where you can print or save it locally.</p>
                             @if($manageRecentReleases)
                                 <p class="mt-3 sm:mt-4 text-[10px] sm:text-xs uppercase tracking-wide text-gray-500">Sample rows</p>
                                 <div class="mt-2 space-y-2">
@@ -1545,7 +1570,6 @@
                         'in_progress' => 'border-primary-500/40 bg-primary-500/15 text-primary-200',
                         'completed' => 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200',
                         'warranty' => 'border-amber-500/40 bg-amber-500/15 text-amber-200',
-                        'archived' => 'border-gray-600/40 bg-gray-600/15 text-gray-200',
                     ];
                     $statusClass = $statusPalette[$selectedProject['status'] ?? ''] ?? 'border-[#1B2537] bg-[#121f33] text-gray-300';
                     $startDate = !empty($selectedProject['start_date']) ? \Illuminate\Support\Carbon::parse($selectedProject['start_date']) : null;

@@ -1,4 +1,4 @@
-@php
+ @php
     use App\Enums\InventoryStatus;
 @endphp
 
@@ -101,7 +101,7 @@
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{{ $index + 1 }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ $inventory->brand }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ $inventory->description }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ $inventory->category }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ ucwords(strtolower($inventory->category)) }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ $inventory->quantity }}</td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 @php
@@ -284,11 +284,11 @@
 
     <!-- Modal -->
     @if($showModal)
-        <div class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" id="my-modal">
-            <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
-                <div class="mt-3">
-                    <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">{{ $editing ? 'Edit Inventory' : 'Add Inventory' }}</h3>
-                    <form wire:submit.prevent="save">
+        <div class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50" id="my-modal">
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                <div class="p-6">
+                    <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-6">{{ $editing ? 'Edit Inventory' : 'Add Inventory' }}</h3>
+                    <form wire:submit.prevent="save" class="space-y-6">
                         <!-- Image Upload Section -->
                         <div class="flex flex-col items-center justify-center mb-6">
                             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">Inventory Image</label>
@@ -345,8 +345,8 @@
                             <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="category">Location</label>
                             <select wire:model="category" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="category">
                                 <option value="">Select location...</option>
-                                <option value="Bodega Room">Bodega Room</option>
-                                <option value="Alchy Room">Alchy Room</option>
+                                <option value="BODEGA ROOM">Bodega Room</option>
+                                <option value="ALCHY ROOM">Alchy Room</option>
                             </select>
                             @error('category') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                         </div>
@@ -367,17 +367,17 @@
                             @error('editPassword') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                         </div>
                         @endif
-                        <div class="flex items-center justify-between">
-                            <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
-                                {{ $editing ? 'Update' : 'Create' }}
-                            </button>
-                            <button type="button" wire:click="closeModal" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
-                                Cancel
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    @endif
+                       <div class="flex items-center justify-end space-x-3 pt-6 border-t border-gray-200 dark:border-gray-700">
+                           <button type="button" wire:click="closeModal" class="px-4 py-2 bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-200 rounded-lg font-medium transition-colors">
+                               Cancel
+                           </button>
+                           <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                               {{ $editing ? 'Update Inventory' : 'Create Inventory' }}
+                           </button>
+                       </div>
+                   </form>
+               </div>
+           </div>
+       </div>
+   @endif
 </div>

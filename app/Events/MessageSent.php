@@ -36,15 +36,28 @@ class MessageSent implements ShouldBroadcastNow
         // Broadcast to the conversation channel and to each user's private channel
         $channels = [];
 
-        // Consistent conversation channel (private)
-        $userIds = [$this->message->user_id, $this->message->recipient_id];
-        sort($userIds);
-        $channelName = 'chat.' . implode('.', $userIds);
-        $channels[] = new PrivateChannel($channelName);
+        // Group chat - broadcast to all users
+        if ($this->message->group_id) {
+            // Broadcast to all users' private channels
+            $allUsers = \App\Models\User::all();
+            foreach ($allUsers as $user) {
+                $channels[] = new PrivateChannel('App.Models.User.' . $user->id);
+            }
+            
+            // Also broadcast to a group channel
+            $channels[] = new PrivateChannel('group.' . $this->message->group_id);
+        } else {
+            // Private message - existing logic
+            // Consistent conversation channel (private)
+            $userIds = [$this->message->user_id, $this->message->recipient_id];
+            sort($userIds);
+            $channelName = 'chat.' . implode('.', $userIds);
+            $channels[] = new PrivateChannel($channelName);
 
-        // Private, per-user channels for badges/notifications
-        $channels[] = new PrivateChannel('App.Models.User.' . $this->message->user_id);
-        $channels[] = new PrivateChannel('App.Models.User.' . $this->message->recipient_id);
+            // Private, per-user channels for badges/notifications
+            $channels[] = new PrivateChannel('App.Models.User.' . $this->message->user_id);
+            $channels[] = new PrivateChannel('App.Models.User.' . $this->message->recipient_id);
+        }
 
         return $channels;
     }
@@ -57,6 +70,7 @@ class MessageSent implements ShouldBroadcastNow
         return [
             'user_id' => $this->message->user_id,
             'recipient_id' => $this->message->recipient_id,
+            'group_id' => $this->message->group_id,
             'message' => $this->message->message,
             'user_name' => optional($this->message->user)->name ?? 'Unknown User',
             'created_at' => optional($this->message->created_at)->toISOString(),

@@ -15,9 +15,21 @@
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                         {{ __('Dashboard') }}
                     </x-nav-link>
+                    @if(auth()->user()->isSystemAdmin() || auth()->user()->isDeveloper())
+                    <x-nav-link :href="route('approvals')" :active="request()->routeIs('approvals')">
+                        <x-heroicon-o-clipboard-document-check class="w-4 h-4 inline mr-1" />
+                        {{ __('Approvals') }}
+                        @php
+                            $pendingCount = \App\Models\MaterialReleaseApproval::where('status', 'pending')->count();
+                        @endphp
+                        @if($pendingCount > 0)
+                            <span class="ml-2 px-2 py-0.5 text-xs bg-orange-500 text-white rounded-full">{{ $pendingCount }}</span>
+                        @endif
+                    </x-nav-link>
+                    @endif
                     @if(auth()->user()->isDeveloper())
                     <x-nav-link :href="route('developer.user-management')" :active="request()->routeIs('developer.user-management')">
-                        <x-heroicon-o-users class="w-4 h-4 mr-2" />
+                        <x-heroicon-o-users class="w-4 h-4 inline mr-1" />
                         {{ __('User Management') }}
                     </x-nav-link>
                     @endif
@@ -72,9 +84,21 @@
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                 {{ __('Dashboard') }}
             </x-responsive-nav-link>
+            @if(auth()->user()->isSystemAdmin() || auth()->user()->isDeveloper())
+            <x-responsive-nav-link :href="route('approvals')" :active="request()->routeIs('approvals')">
+                <x-heroicon-o-clipboard-document-check class="w-4 h-4 inline mr-1" />
+                {{ __('Approvals') }}
+                @php
+                    $pendingCount = \App\Models\MaterialReleaseApproval::where('status', 'pending')->count();
+                @endphp
+                @if($pendingCount > 0)
+                    <span class="ml-2 px-2 py-0.5 text-xs bg-orange-500 text-white rounded-full">{{ $pendingCount }}</span>
+                @endif
+            </x-responsive-nav-link>
+            @endif
             @if(auth()->user()->isDeveloper())
             <x-responsive-nav-link :href="route('developer.user-management')" :active="request()->routeIs('developer.user-management')">
-                <x-heroicon-o-users class="w-4 h-4 mr-2" />
+                <x-heroicon-o-users class="w-4 h-4 inline mr-1" />
                 {{ __('User Management') }}
             </x-responsive-nav-link>
             @endif

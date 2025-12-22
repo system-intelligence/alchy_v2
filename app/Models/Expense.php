@@ -19,7 +19,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property \Carbon\Carbon $released_at
  * @property \Carbon\Carbon $created_at
  * @property \Carbon\Carbon $updated_at
- *
  * @property-read \App\Models\Client $client
  * @property-read \App\Models\Inventory $inventory
  */
@@ -32,12 +31,12 @@ class Expense extends Model
      */
     protected $fillable = [
         'client_id',
-    'inventory_id',
-    'project_id',
+        'inventory_id',
+        'project_id',
         'quantity_used',
         'cost_per_unit',
         'total_cost',
-        'released_at'
+        'released_at',
     ];
 
     /**
@@ -86,8 +85,6 @@ class Expense extends Model
 
     /**
      * Calculate and set the total cost based on quantity and cost per unit.
-     *
-     * @return void
      */
     public function calculateTotalCost(): void
     {
@@ -96,9 +93,6 @@ class Expense extends Model
 
     /**
      * Check if the expense was released within the last N days.
-     *
-     * @param int $days
-     * @return bool
      */
     public function wasReleasedRecently(int $days = 7): bool
     {

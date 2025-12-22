@@ -28,6 +28,9 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        // Record login time and IP
+        auth()->user()->recordLogin($request->ip());
+
         return redirect()->intended(route('dashboard', absolute: false));
     }
 
@@ -36,6 +39,11 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        // Record logout time before logging out
+        if (auth()->check()) {
+            auth()->user()->recordLogout();
+        }
+
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();

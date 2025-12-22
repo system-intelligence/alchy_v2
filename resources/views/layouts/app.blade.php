@@ -56,6 +56,13 @@
                                 <x-heroicon-o-clock class="w-5 h-5 mr-3" />
                                 History
                             </a>
+                            <a href="{{ route('tools') }}" @class([
+                                'flex items-center py-3 px-3 rounded-lg transition duration-200 text-gray-300 hover:text-primary-400 hover:bg-[#172033]',
+                                'bg-[#172033] text-primary-400 border-r-2 border-primary-500' => request()->routeIs('tools'),
+                            ])>
+                                <x-heroicon-o-wrench-screwdriver class="w-5 h-5 mr-3" />
+                                Tools & Equipment
+                            </a>
                             @if(!auth()->user()->isUser())
                             <a href="{{ route('expenses') }}" @class([
                                 'flex items-center py-3 px-3 rounded-lg transition duration-200 text-gray-300 hover:text-primary-400 hover:bg-[#172033]',
@@ -144,6 +151,79 @@
         document.getElementById('sidebar-toggle').addEventListener('click', function() {
             document.getElementById('sidebar').classList.toggle('-translate-x-full');
         });
+
+        // Auto-join presence channel for all authenticated users
+        document.addEventListener('livewire:initialized', () => {
+            if (window.Echo) {
+                console.log('[Presence] Auto-joining online presence channel...');
+                window.Echo.join('online')
+                    .here((users) => {
+                        console.log('[Presence] Online users:', users.length);
+                    })
+                    .joining((user) => {
+                        console.log('[Presence] User came online:', user.name);
+                    })
+                    .leaving((user) => {
+                        console.log('[Presence] User went offline:', user.name);
+                    })
+                    .error((error) => {
+                        console.error('[Presence] Channel error:', error);
+                    });
+            } else {
+                console.warn('[Presence] Echo not available. Make sure to run: npm run dev');
+            }
+        });
+
+        // History page listeners
+        if (window.location.pathname === '/history') {
+            document.addEventListener('DOMContentLoaded', function() {
+                console.log('[History] 🚀 Page loaded, setting up listeners...');
+                
+                // Listen for Livewire refresh confirmation
+                window.addEventListener('history-refreshed', (event) => {
+                    console.log('[History] ✅ History refreshed!', event.detail);
+                });
+                
+                if (window.Echo) {
+                    console.log('[History] 🔌 Echo available, setting up channel listener...');
+                    
+                    const channel = window.Echo.channel('history-updates');
+                    console.log('[History] 📡 Subscribing to channel: history-updates');
+                    
+                    channel.listen('.history.created', (data) => {
+                            console.log('[History] 🔔 NEW HISTORY EVENT RECEIVED!', data);
+                            console.log('[History] 📊 Event data:', JSON.stringify(data, null, 2));
+                            
+                            // Dispatch to Livewire component
+                            console.log('[History] 🔄 Dispatching refreshHistory to Livewire...');
+                            Livewire.dispatch('refreshHistory');
+                            
+                            // Show toast notification
+                            console.log('[History] 🍞 Showing toast notification...');
+                            window.dispatchEvent(new CustomEvent('new-message-notification', {
+                                detail: {
+                                    message: 'New history entry: ' + (data.action || 'Update'),
+                                    type: 'info',
+                                    duration: 3000
+                                }
+                            }));
+                        })
+                        .subscribed(() => {
+                            console.log('[History] ✅ SUCCESSFULLY SUBSCRIBED to history-updates channel!');
+                            console.log('[History] 🎧 Listening for .history.created events...');
+                        })
+                        .error((error) => {
+                            console.error('[History] ❌ Echo channel error:', error);
+                        });
+                        
+                    console.log('[History] ✓ Echo listener setup complete');
+                } else {
+                    console.warn('[History] ⚠️ Echo is NOT available! Pusher may not be loaded.');
+                    console.log('[History] 🔍 Check if window.Echo exists:', typeof window.Echo);
+                    console.log('[History] 🔍 Check if window.Pusher exists:', typeof window.Pusher);
+                }
+            });
+        }
     </script>
 </body>
 </html>

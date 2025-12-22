@@ -10,11 +10,17 @@ use App\Models\Expense;
 use App\Models\Inventory;
 use App\Models\History;
 use App\Models\Project;
+use App\Models\MaterialReleaseApproval;
+use App\Models\User;
+use App\Models\Chat;
+use App\Notifications\MaterialReleaseApprovalRequest;
+use App\Events\ApprovalRequestCreated;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class Expenses extends Component
 {
@@ -82,6 +88,12 @@ class Expenses extends Component
     public $showDeleteClientModal = false;
     public $deleteClientId = null;
     public $deletePassword = '';
+
+    // Project Deletion modal
+    public $showDeleteProjectModal = false;
+    public $deleteProjectId = null;
+    public $deleteProjectPassword = '';
+    public $deleteProjectData = null;
 
     // Project Management modal state
     public $showProjectModal = false;
@@ -170,6 +182,13 @@ class Expenses extends Component
             $query->whereDate('released_at', $this->filterDate);
         }
         $this->clientExpenses = $query->latest()->get();
+        History::create([
+            'user_id' => auth()->id(),
+            'action' => 'view',
+            'model' => 'client',
+            'model_id' => $clientId,
+            'changes' => ['viewed_expenses' => true, 'expense_count' => $this->clientExpenses->count()],
+        ]);
         $this->refreshCalendarEvents();
     }
 
@@ -181,6 +200,7 @@ class Expenses extends Component
         $this->clientExpenses = [];
         $this->showClientModal = false;
         $this->showDeleteClientModal = false;
+        $this->showDeleteProjectModal = false;
         $this->showProjectModal = false;
         $this->showProjectDetailModal = false;
         $this->showProjectManageModal = false;
@@ -191,6 +211,7 @@ class Expenses extends Component
         $this->calendarEvents = [];
         $this->resetClientForm();
         $this->resetDeleteForm();
+        $this->resetDeleteProjectForm();
         $this->resetProjectForm();
         $this->resetProjectManageState();
         $this->cancelEditExpense();
@@ -223,14 +244,25 @@ class Expenses extends Component
             return;
         }
 
-        $name = $client->name . ' / ' . $client->branch;
+        // Capture all client details before deletion
+        $clientDetails = [
+            'name' => $client->name,
+            'branch' => $client->branch,
+            'status' => $client->status,
+            'has_logo' => $client->hasImageBlob(),
+            'total_expenses' => $client->expenses()->sum('total_cost'),
+            'expense_count' => $client->expenses()->count(),
+            'project_count' => $client->projects()->count(),
+            'deleted' => true
+        ];
+
         $client->delete();
         History::create([
             'user_id' => auth()->id(),
             'action' => 'delete',
             'model' => 'client',
             'model_id' => $this->deleteClientId,
-            'changes' => ['name' => $name, 'deleted' => true],
+            'changes' => $clientDetails,
         ]);
 
         $this->loadClients();
@@ -242,6 +274,84 @@ class Expenses extends Component
     {
         $this->deleteClientId = null;
         $this->deletePassword = '';
+    }
+
+    public function openDeleteProjectModal($projectId)
+    {
+        $this->ensureAdmin();
+        $this->deleteProjectId = $projectId;
+        $this->showProjectManageModal = false; // Close the manage modal
+
+        // Load project data for display
+        $project = Project::with(['expenses', 'projectNotes'])->find($projectId);
+        if ($project) {
+            $this->deleteProjectData = [
+                'name' => $project->name,
+                'expense_count' => $project->expenses()->count(),
+                'note_count' => $project->projectNotes()->count(),
+                'total_expenses' => $project->expenses()->sum('total_cost'),
+            ];
+        }
+
+        $this->showDeleteProjectModal = true;
+    }
+
+    public function confirmDeleteProject()
+    {
+        $this->ensureAdmin();
+
+        $this->validate([
+            'deleteProjectPassword' => 'required',
+        ]);
+
+        // Check password
+        if (!\Illuminate\Support\Facades\Hash::check($this->deleteProjectPassword, auth()->user()->password)) {
+            $this->addError('deleteProjectPassword', 'The password is incorrect.');
+            return;
+        }
+
+        $project = Project::find($this->deleteProjectId);
+        if (!$project) {
+            session()->flash('message', 'Project not found.');
+            return;
+        }
+
+        // Capture all project details before deletion
+        $projectDetails = [
+            'name' => $project->name,
+            'reference_code' => $project->reference_code,
+            'client_id' => $project->client_id,
+            'status' => $project->status,
+            'job_type' => $project->job_type,
+            'start_date' => $project->start_date?->format('Y-m-d'),
+            'target_date' => $project->target_date?->format('Y-m-d'),
+            'warranty_until' => $project->warranty_until?->format('Y-m-d'),
+            'notes' => $project->notes,
+            'total_expenses' => $project->expenses()->sum('total_cost'),
+            'expense_count' => $project->expenses()->count(),
+            'note_count' => $project->projectNotes()->count(),
+            'deleted' => true
+        ];
+
+        $project->delete();
+        History::create([
+            'user_id' => auth()->id(),
+            'action' => 'delete',
+            'model' => 'project',
+            'model_id' => $this->deleteProjectId,
+            'changes' => $projectDetails,
+        ]);
+
+        $this->loadClients();
+        $this->closeModal();
+        session()->flash('message', 'Project deleted successfully.');
+    }
+
+    protected function resetDeleteProjectForm(): void
+    {
+        $this->deleteProjectId = null;
+        $this->deleteProjectPassword = '';
+        $this->deleteProjectData = null;
     }
 
     public function openProjectModal(?int $projectId = null, ?int $clientId = null): void
@@ -583,6 +693,14 @@ class Expenses extends Component
             ->values()
             ->toArray();
 
+        History::create([
+            'user_id' => auth()->id(),
+            'action' => 'view',
+            'model' => 'project',
+            'model_id' => $projectId,
+            'changes' => ['viewed_details' => true],
+        ]);
+
         $this->showProjectDetailModal = true;
     }
 
@@ -686,9 +804,169 @@ class Expenses extends Component
         return true;
     }
 
+    protected function submitApprovalRequest(): void
+    {
+        if (!$this->managingProject) {
+            session()->flash('message', 'Select a project before releasing materials.');
+            return;
+        }
+
+        $this->validate([
+            'manageReleaseItems' => 'required|array|min:1',
+            'manageReleaseItems.*.inventory_id' => 'required|exists:inventories,id',
+            'manageReleaseItems.*.quantity' => 'required|integer|min:1',
+            'manageReleaseItems.*.cost_per_unit' => 'required|numeric|min:0',
+            'manageReleaseDate' => 'required|date',
+            'manageReleaseTime' => 'required',
+            'manageReleaseNotes' => 'nullable|string|max:2000',
+        ]);
+
+        $project = Project::with('client')->find($this->managingProject['id']);
+        if (!$project) {
+            session()->flash('message', 'Project not found.');
+            return;
+        }
+
+        $items = collect($this->manageReleaseItems)
+            ->map(fn ($item) => [
+                'inventory_id' => isset($item['inventory_id']) ? (int) $item['inventory_id'] : 0,
+                'quantity' => isset($item['quantity']) ? (int) $item['quantity'] : 0,
+                'cost_per_unit' => isset($item['cost_per_unit']) ? (float) $item['cost_per_unit'] : 0.0,
+            ])
+            ->filter(fn ($item) => $item['inventory_id'] > 0)
+            ->values();
+
+        if ($items->isEmpty()) {
+            $this->addError('manageReleaseItems', 'Add at least one material before saving.');
+            return;
+        }
+
+        $inventories = Inventory::whereIn('id', $items->pluck('inventory_id'))->get()->keyBy('id');
+        
+        DB::beginTransaction();
+        try {
+            $systemAdmins = User::where('role', 'system_admin')->get();
+            
+            if ($systemAdmins->isEmpty()) {
+                \Log::warning('No system administrators found');
+                session()->flash('message', 'No system administrators available to approve your request.');
+                DB::rollBack();
+                return;
+            }
+
+            foreach ($items as $item) {
+                $inventory = $inventories->get($item['inventory_id']);
+                
+                try {
+                    $chat = Chat::create([
+                        'user_id' => auth()->id(),
+                        'recipient_id' => $systemAdmins->first()->id,
+                        'message' => "📋 Material Release Request\n\nProject: {$project->reference_code}\nItem: {$inventory->brand} - {$inventory->description}\nQuantity: {$item['quantity']}\nReason: " . ($this->manageReleaseNotes ?: 'No reason provided'),
+                    ]);
+                } catch (\Exception $e) {
+                    \Log::error('Failed to create chat: ' . $e->getMessage());
+                    $chat = null;
+                }
+
+                $approval = MaterialReleaseApproval::create([
+                    'requested_by' => auth()->id(),
+                    'inventory_id' => $inventory->id,
+                    'quantity_requested' => $item['quantity'],
+                    'reason' => $this->manageReleaseNotes ?: "Material release for project {$project->reference_code}",
+                    'status' => 'pending',
+                    'chat_id' => $chat ? $chat->id : null,
+                ]);
+
+                // Create history entry for the request
+                \App\Models\History::create([
+                    'user_id' => auth()->id(),
+                    'action' => 'Material Release Request Created',
+                    'model' => 'MaterialReleaseApproval',
+                    'model_id' => $approval->id,
+                    'changes' => json_encode([
+                        'status' => 'pending',
+                        'project' => $project->reference_code,
+                        'material' => $inventory->material_name,
+                        'quantity' => $item['quantity'],
+                        'reason' => $this->manageReleaseNotes ?: 'No reason provided',
+                        'requested_at' => now()->toDateTimeString(),
+                    ]),
+                    'old_values' => null,
+                ]);
+
+                // Broadcast history creation event
+                try {
+                    $historyEntry = \App\Models\History::where('user_id', auth()->id())
+                        ->where('model', 'MaterialReleaseApproval')
+                        ->where('model_id', $approval->id)
+                        ->latest()
+                        ->first();
+                    if ($historyEntry) {
+                        event(new \App\Events\HistoryEntryCreated($historyEntry));
+                    }
+                } catch (\Exception $e) {
+                    \Log::error('Failed to broadcast history event: ' . $e->getMessage());
+                }
+
+                try {
+                    event(new ApprovalRequestCreated($approval));
+                } catch (\Exception $e) {
+                    \Log::error('Failed to broadcast event: ' . $e->getMessage());
+                }
+
+                foreach ($systemAdmins as $admin) {
+                    try {
+                        $admin->notify(new MaterialReleaseApprovalRequest($approval));
+                    } catch (\Exception $e) {
+                        \Log::error('Failed to notify admin: ' . $e->getMessage());
+                    }
+                }
+            }
+
+            DB::commit();
+            
+            $this->resetManageReleaseForm();
+            $this->hydrateManageProject($project->id, preserveTab: true);
+            
+            session()->flash('message', '✅ Material release request sent to System Admin for approval. Materials will NOT be released until approved.');
+        } catch (\Throwable $exception) {
+            DB::rollBack();
+            \Log::error('Approval request failed: ' . $exception->getMessage());
+            $this->addError('manageReleaseItems', 'Unable to submit approval request: ' . $exception->getMessage());
+        }
+    }
+
     public function recordProjectRelease(): void
     {
-        $this->ensureAdmin();
+        $user = auth()->user();
+        
+        // ABSOLUTE BLOCK: Regular users CANNOT directly release materials
+        if ($user->role === 'user') {
+            \Log::info('🚫 BLOCKED: Regular user attempting direct release - redirecting to approval workflow');
+            
+            // Redirect to approval workflow
+            $this->submitApprovalRequest();
+            return;
+        }
+        
+        // Check if user is system_admin or developer
+        $isSystemAdmin = $user->isSystemAdmin() || $user->isDeveloper();
+        
+        // Log for debugging
+        \Log::info('Material Release Attempt', [
+            'user_id' => $user->id,
+            'user_role' => $user->role,
+            'isSystemAdmin()' => $user->isSystemAdmin(),
+            'isDeveloper()' => $user->isDeveloper(),
+            'is_system_admin_combined' => $isSystemAdmin,
+            'user_name' => $user->name
+        ]);
+        
+        // FORCE CHECK: If user role is 'user', they MUST go through approval
+        if ($user->role === 'user') {
+            \Log::info('USER ROLE DETECTED - FORCING APPROVAL WORKFLOW');
+            $isSystemAdmin = false; // Force approval workflow
+        }
 
         if (!$this->managingProject) {
             session()->flash('message', 'Select a project before releasing materials.');
@@ -749,6 +1027,92 @@ class Expenses extends Component
             }
         }
 
+        // If user role, create approval requests instead of releasing directly
+        if (!$isSystemAdmin) {
+            \Log::info('Regular user submitting material release - creating approval request');
+            
+            DB::beginTransaction();
+            try {
+                // Get all system admins
+                $systemAdmins = User::where('role', 'system_admin')->get();
+                
+                if ($systemAdmins->isEmpty()) {
+                    \Log::warning('No system administrators found');
+                    session()->flash('message', 'No system administrators available to approve your request.');
+                    DB::rollBack();
+                    return;
+                }
+
+                \Log::info('Found ' . $systemAdmins->count() . ' system admins');
+
+                // Create approval requests for each item
+                foreach ($items as $item) {
+                    $inventory = $inventories->get($item['inventory_id']);
+                    
+                    // Create chat message (without triggering Pusher if it fails)
+                    try {
+                        $chat = Chat::create([
+                            'user_id' => auth()->id(),
+                            'recipient_id' => $systemAdmins->first()->id,
+                            'message' => "📋 Material Release Request\n\nProject: {$project->reference_code}\nItem: {$inventory->brand} - {$inventory->description}\nQuantity: {$item['quantity']}\nReason: " . ($this->manageReleaseNotes ?: 'No reason provided'),
+                        ]);
+                        
+                        \Log::info('Chat created with ID: ' . $chat->id);
+                    } catch (\Exception $e) {
+                        \Log::error('Failed to create chat: ' . $e->getMessage());
+                        // Continue even if chat fails
+                        $chat = null;
+                    }
+
+                    $approval = MaterialReleaseApproval::create([
+                        'requested_by' => auth()->id(),
+                        'inventory_id' => $inventory->id,
+                        'quantity_requested' => $item['quantity'],
+                        'reason' => $this->manageReleaseNotes ?: "Material release for project {$project->reference_code}",
+                        'status' => 'pending',
+                        'chat_id' => $chat ? $chat->id : null,
+                    ]);
+
+                    \Log::info('Approval request created with ID: ' . $approval->id);
+
+                    // Try to broadcast event (don't fail if Pusher is down)
+                    try {
+                        event(new ApprovalRequestCreated($approval));
+                    } catch (\Exception $e) {
+                        \Log::error('Failed to broadcast event: ' . $e->getMessage());
+                    }
+
+                    // Notify all system admins
+                    foreach ($systemAdmins as $admin) {
+                        try {
+                            $admin->notify(new MaterialReleaseApprovalRequest($approval));
+                        } catch (\Exception $e) {
+                            \Log::error('Failed to notify admin ' . $admin->id . ': ' . $e->getMessage());
+                        }
+                    }
+                }
+
+                DB::commit();
+                
+                \Log::info('Approval request submitted successfully');
+                
+                $this->resetManageReleaseForm();
+                $this->hydrateManageProject($project->id, preserveTab: true);
+                
+                session()->flash('message', '✅ Material release request sent to System Admin for approval. Please wait for approval before materials are released.');
+                return;
+            } catch (\Throwable $exception) {
+                DB::rollBack();
+                \Log::error('Approval request failed: ' . $exception->getMessage());
+                \Log::error('Stack trace: ' . $exception->getTraceAsString());
+                $this->addError('manageReleaseItems', 'Unable to submit approval request: ' . $exception->getMessage());
+                return;
+            }
+        }
+
+        \Log::info('System admin releasing materials directly');
+
+        // System Admin: Direct release (original logic)
         $releasedAt = Carbon::parse(
             $this->manageReleaseDate . ' ' . $this->manageReleaseTime,
             'Asia/Manila'
@@ -787,6 +1151,12 @@ class Expenses extends Component
                         ? InventoryStatus::CRITICAL
                         : InventoryStatus::NORMAL);
 
+                // Capture old values before update
+                $oldInventoryValues = [
+                    'quantity' => $inventory->quantity,
+                    'status' => $inventory->status,
+                ];
+
                 $inventory->update([
                     'quantity' => $newQuantity,
                     'status' => $newStatus->value,
@@ -817,6 +1187,7 @@ class Expenses extends Component
                     'action' => 'update',
                     'model' => 'inventory',
                     'model_id' => $inventory->id,
+                    'old_values' => $oldInventoryValues,
                     'changes' => [
                         'quantity' => $newQuantity,
                         'status' => $newStatus->value,
@@ -834,7 +1205,7 @@ class Expenses extends Component
                 $this->viewExpenses($project->client_id);
             }
 
-            session()->flash('message', $items->count() . ' material release(s) recorded successfully.');
+            session()->flash('message', $items->count() . ' material release(s) recorded and inventory updated successfully.');
         } catch (\Throwable $exception) {
             DB::rollBack();
             \Log::error('Project release failed: ' . $exception->getMessage());
@@ -975,6 +1346,16 @@ class Expenses extends Component
             return;
         }
 
+        // Capture note details before deletion
+        $noteDetails = [
+            'project_id' => $note->project_id,
+            'content' => $note->content,
+            'has_images' => !empty($note->images),
+            'created_by' => $note->user->name,
+            'created_at' => $note->created_at->format('Y-m-d H:i:s'),
+            'deleted' => true
+        ];
+
         $note->delete();
 
         History::create([
@@ -982,9 +1363,7 @@ class Expenses extends Component
             'action' => 'delete',
             'model' => 'project_note',
             'model_id' => $noteId,
-            'changes' => [
-                'project_id' => $note->project_id,
-            ],
+            'changes' => $noteDetails,
         ]);
 
         $this->loadProjectNotes();
@@ -1001,133 +1380,64 @@ class Expenses extends Component
             return null;
         }
 
+        // Generate unique verification hash
+        $receiptData = [
+            'project_id' => $project->id,
+            'project_name' => $project->name,
+            'reference_code' => $project->reference_code,
+            'client_name' => $project->client->name,
+            'total_expenses' => $project->expenses->sum('total_cost'),
+            'expense_count' => $project->expenses->count(),
+            'generated_at' => now()->toIso8601String(),
+        ];
+        
+        $verificationHash = hash('sha256', json_encode($receiptData) . config('app.key'));
+        
+        // Store verification record
+        $verification = \App\Models\ReceiptVerification::create([
+            'project_id' => $project->id,
+            'verification_hash' => $verificationHash,
+            'receipt_data' => $receiptData,
+            'generated_at' => now(),
+            'generated_by' => auth()->user()->name,
+        ]);
+
+        History::create([
+            'user_id' => auth()->id(),
+            'action' => 'create',
+            'model' => 'receipt_verification',
+            'model_id' => $verification->id,
+            'changes' => [
+                'project_id' => $verification->project_id,
+                'verification_hash' => $verification->verification_hash,
+                'generated_at' => $verification->generated_at->toDateTimeString(),
+                'generated_by' => $verification->generated_by,
+            ],
+        ]);
+
         $filename = Str::slug($project->reference_code ?: $project->name ?: 'project')
-            . '-receipt-' . now()->format('Ymd_His') . '.csv';
-        $includeExpenseNotes = $this->expenseNotesEnabled();
+            . '-receipt-' . now()->format('Ymd_His') . '.pdf';
 
-        return response()->streamDownload(function () use ($project, $includeExpenseNotes) {
-            $handle = fopen('php://output', 'w');
-            
-            // Use UTF-8 BOM for proper encoding in Excel
-            fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
+        // Generate verification URL for QR code
+        $verificationUrl = route('verify-receipt', ['hash' => $verificationHash]);
 
-            // Company Header
-            fputcsv($handle, ['ALCHY ENTERPRISE INC.']);
-            fputcsv($handle, ['Smart Inventory System']);
-            fputcsv($handle, []);
-            fputcsv($handle, ['PROJECT RECEIPT & MATERIAL RELEASE REPORT']);
-            fputcsv($handle, []);
-            fputcsv($handle, []);
-            
-            // Project Information Section
-            fputcsv($handle, ['PROJECT DETAILS', '', '', '', '', '']);
-            fputcsv($handle, ['Project Name', $project->name, '', '', '', '']);
-            fputcsv($handle, ['Reference Code', $project->reference_code ?: 'N/A', '', '', '', '']);
-            fputcsv($handle, ['Status', strtoupper(str_replace('_', ' ', $project->status)), '', '', '', '']);
-            fputcsv($handle, []);
-            
-            // Client Information
-            fputcsv($handle, ['CLIENT INFORMATION', '', '', '', '', '']);
-            fputcsv($handle, ['Company', $project->client->name, '', '', '', '']);
-            fputcsv($handle, ['Branch', $project->client->branch, '', '', '', '']);
-            fputcsv($handle, []);
-            
-            // Project Timeline
-            fputcsv($handle, ['PROJECT TIMELINE', '', '', '', '', '']);
-            fputcsv($handle, ['Start Date', $project->start_date ? Carbon::parse($project->start_date)->format('F d, Y') : 'Not Set', '', '', '', '']);
-            fputcsv($handle, ['Target Completion', $project->target_date ? Carbon::parse($project->target_date)->format('F d, Y') : 'Not Set', '', '', '', '']);
-            fputcsv($handle, ['Warranty Until', $project->warranty_until ? Carbon::parse($project->warranty_until)->format('F d, Y') : 'Not Set', '', '', '', '']);
-            fputcsv($handle, []);
-            
-            // Project Notes Section
-            if ($project->notes) {
-                fputcsv($handle, ['PROJECT OVERVIEW', '', '', '', '', '']);
-                $notesLines = explode("\n", $project->notes);
-                foreach ($notesLines as $line) {
-                    fputcsv($handle, [trim($line), '', '', '', '', '']);
-                }
-                fputcsv($handle, []);
-            }
-            
-            // Documentation Notes
-            if ($project->projectNotes && $project->projectNotes->count() > 0) {
-                fputcsv($handle, ['DOCUMENTATION HISTORY', '', '', '', '', '']);
-                fputcsv($handle, []);
-                fputcsv($handle, ['Date & Time', 'Documented By', 'Notes', '', '', '']);
-                
-                foreach ($project->projectNotes->sortBy('created_at') as $note) {
-                    fputcsv($handle, [
-                        $note->created_at->setTimezone('Asia/Manila')->format('M d, Y h:i A'),
-                        $note->user->name ?? 'Unknown User',
-                        str_replace(["\r\n", "\n", "\r"], ' | ', $note->content),
-                        '',
-                        '',
-                        ''
-                    ]);
-                }
-                fputcsv($handle, []);
-                fputcsv($handle, []);
-            }
+        // Generate QR code as SVG (works without imagick/gd)
+        $qrCodeSvg = \SimpleSoftwareIO\QrCode\Facades\QrCode::size(75)
+            ->errorCorrection('H')
+            ->generate($verificationUrl);
 
-            // Material Releases Section
-            fputcsv($handle, ['MATERIAL RELEASES & EXPENSES BREAKDOWN', '', '', '', '', '']);
-            fputcsv($handle, []);
-            
-            // Table header with proper column structure
-            $header = ['Date & Time', 'Item Brand', 'Description', 'Quantity', 'Unit Price (₱)', 'Total (₱)'];
-            if ($includeExpenseNotes) {
-                $header[] = 'Release Notes';
-            }
-            fputcsv($handle, $header);
-
-            $totalAmount = 0;
-            $itemCount = 0;
-            
-            foreach ($project->expenses->sortBy('released_at') as $expense) {
-                $releasedAt = $expense->released_at
-                    ? $expense->released_at->setTimezone('Asia/Manila')->format('M d, Y h:i A')
-                    : 'Not Specified';
-
-                $row = [
-                    $releasedAt,
-                    $expense->inventory->brand ?? 'Unknown Item',
-                    $expense->inventory->description ?? 'No Description',
-                    number_format($expense->quantity_used, 2),
-                    number_format($expense->cost_per_unit, 2),
-                    number_format($expense->total_cost, 2),
-                ];
-
-                if ($includeExpenseNotes) {
-                    $row[] = $expense->notes ? str_replace(["\r\n", "\n", "\r"], ' | ', $expense->notes) : '';
-                }
-
-                fputcsv($handle, $row);
-                $totalAmount += $expense->total_cost;
-                $itemCount++;
-            }
-            
-            // Summary Section with spacing
-            fputcsv($handle, []);
-            fputcsv($handle, []);
-            fputcsv($handle, ['FINANCIAL SUMMARY', '', '', '', '', '']);
-            fputcsv($handle, []);
-            fputcsv($handle, ['Total Line Items', $itemCount, '', '', '', '']);
-            fputcsv($handle, ['Total Units Released', number_format($project->expenses->sum('quantity_used'), 2), '', '', '', '']);
-            fputcsv($handle, []);
-            fputcsv($handle, ['GRAND TOTAL', '', '', '', '', number_format($totalAmount, 2)]);
-            fputcsv($handle, []);
-            fputcsv($handle, []);
-            fputcsv($handle, []);
-            
-            // Footer Section
-            fputcsv($handle, ['Document Information', '', '', '', '', '']);
-            fputcsv($handle, ['Generated On', now()->setTimezone('Asia/Manila')->format('F d, Y - h:i A'), '', '', '', '']);
-            fputcsv($handle, ['Generated By', auth()->user()->name ?? 'System', '', '', '', '']);
-            fputcsv($handle, ['System', 'Alchy Enterprise Inc. - Smart Inventory System', '', '', '', '']);
-
-            fclose($handle);
+        // Generate PDF with verification data
+        $pdf = \PDF::loadView('pdf.project-receipt', compact('project', 'verificationHash', 'verificationUrl', 'qrCodeSvg'));
+        
+        // Set PDF options for security
+        $pdf->setPaper('a4', 'portrait');
+        $pdf->setOption('enable-local-file-access', true);
+        
+        return response()->streamDownload(function () use ($pdf) {
+            echo $pdf->output();
         }, $filename, [
-            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . $filename . '"'
         ]);
     }
 
@@ -1584,6 +1894,8 @@ class Expenses extends Component
                     'project_name' => $project?->name ?? 'General Expenses',
                     'reference_code' => $project?->reference_code,
                     'status' => $project?->status,
+                    'start_date' => $project?->start_date,
+                    'target_date' => $project?->target_date,
                     'warranty_until' => $project?->warranty_until,
                     'expenses' => $sortedExpenses,
                     'subtotal' => $sortedExpenses->sum('total_cost'),

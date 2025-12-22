@@ -58,7 +58,7 @@ class Inventory extends Model
     /**
      * Valid category values for inventory items.
      */
-    public const CATEGORIES = ['Bodega Room', 'Alchy Room'];
+    public const CATEGORIES = ['BODEGA ROOM', 'ALCHY ROOM'];
 
     /**
      * Attribute casting configuration.

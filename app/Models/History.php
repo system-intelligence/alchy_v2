@@ -10,12 +10,34 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *
  * Tracks all user actions and changes in the system for audit purposes.
  *
+ * Security Feature: For update actions, both old_values and changes should be stored
+ * to allow comparison of before/after states for security auditing.
+ *
+ * Example usage for updates:
+ * 
+ * $oldValues = [
+ *     'field1' => $model->field1,
+ *     'field2' => $model->field2,
+ * ];
+ * 
+ * $model->update(['field1' => $newValue1, 'field2' => $newValue2]);
+ * 
+ * History::create([
+ *     'user_id' => auth()->id(),
+ *     'action' => 'update',
+ *     'model' => 'model_name',
+ *     'model_id' => $model->id,
+ *     'old_values' => $oldValues,
+ *     'changes' => ['field1' => $newValue1, 'field2' => $newValue2],
+ * ]);
+ *
  * @property int $id
  * @property int $user_id
  * @property string $action
  * @property string $model
  * @property int $model_id
  * @property array|null $changes
+ * @property array|null $old_values
  * @property \Carbon\Carbon $created_at
  * @property \Carbon\Carbon $updated_at
  *
@@ -33,7 +55,8 @@ class History extends Model
         'action',
         'model',
         'model_id',
-        'changes'
+        'changes',
+        'old_values'
     ];
 
     /**
@@ -45,6 +68,7 @@ class History extends Model
     {
         return [
             'changes' => 'array',
+            'old_values' => 'array',
         ];
     }
 
@@ -57,7 +81,6 @@ class History extends Model
         'delete',
         'login',
         'logout',
-        'view',
         'export'
     ];
 
@@ -84,7 +107,6 @@ class History extends Model
             'delete' => 'Deleted',
             'login' => 'Logged in',
             'logout' => 'Logged out',
-            'view' => 'Viewed',
             'export' => 'Exported',
             default => ucfirst($this->action),
         };
@@ -102,6 +124,8 @@ class History extends Model
             'client' => 'Client',
             'expense' => 'Expense',
             'user' => 'User',
+            'material_release_approval' => 'Material Release Approval',
+            'MaterialReleaseApproval' => 'Material Release Approval',
             default => ucfirst($this->model),
         };
     }

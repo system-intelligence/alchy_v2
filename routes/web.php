@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ReceiptVerificationController;
 use App\Http\Controllers\WebPushController;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Route;
@@ -39,16 +40,31 @@ Route::get('/history', function () {
     return view('history');
 })->middleware(['auth'])->name('history');
 
-Route::get('/expenses', function () {
-    if (auth()->user()->isUser()) {
+Route::get('/approvals', function () {
+    $user = auth()->user();
+    if (!$user->isSystemAdmin() && !$user->isDeveloper()) {
         abort(403, 'Access denied');
     }
+    return view('approvals');
+})->middleware(['auth'])->name('approvals');
+
+Route::get('/expenses', function () {
+    // Allow all authenticated users - regular users can request releases (approval needed)
+    // Only system admins/developers can directly release
     return view('expenses');
 })->middleware(['auth'])->name('expenses');
+
+Route::get('/tools', function () {
+    return view('tools');
+})->middleware(['auth'])->name('tools');
 
 Route::get('/developer/user-management', function () {
     return view('developer.user-management');
 })->middleware(['auth'])->name('developer.user-management');
+
+// Public routes for receipt verification (no auth required)
+Route::get('/verify-receipt/{hash}', [ReceiptVerificationController::class, 'verify'])->name('verify-receipt');
+Route::get('/receipt-scanner', [ReceiptVerificationController::class, 'scanner'])->name('receipt-scanner');
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Hash;
 class UserManagement extends Component
 {
     public $users;
+    public $onlineUsers = [];
     public $showModal = false;
     public $editing = false;
     public $userId;
@@ -21,11 +22,32 @@ class UserManagement extends Component
     public function mount()
     {
         $this->loadUsers();
+        $this->loadOnlineUsers();
     }
 
     public function loadUsers()
     {
         $this->users = User::latest()->get();
+    }
+
+    public function loadOnlineUsers()
+    {
+        // Get users who have been active in the last 2 minutes
+        $this->onlineUsers = User::where('last_seen', '>=', now()->subMinutes(2))
+            ->pluck('id')
+            ->toArray();
+    }
+
+    #[\Livewire\Attributes\On('user-status-changed')]
+    public function updateUserStatus($userId, $isOnline)
+    {
+        if ($isOnline) {
+            if (!in_array($userId, $this->onlineUsers)) {
+                $this->onlineUsers[] = $userId;
+            }
+        } else {
+            $this->onlineUsers = array_filter($this->onlineUsers, fn($id) => $id != $userId);
+        }
     }
 
     public function openModal($id = null)
@@ -179,13 +201,24 @@ class UserManagement extends Component
             return;
         }
 
+        // Capture all user details before deletion
+        $userDetails = [
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => $user->role,
+            'has_avatar' => $user->hasImageBlob(),
+            'last_seen' => $user->last_seen?->format('Y-m-d H:i:s'),
+            'email_verified' => $user->email_verified_at ? true : false,
+            'deleted' => true
+        ];
+
         $user->delete();
         History::create([
             'user_id' => auth()->id(),
             'action' => 'delete',
             'model' => 'user',
             'model_id' => $this->deletingUserId,
-            'changes' => ['deleted' => true],
+            'changes' => $userDetails,
         ]);
 
         $this->loadUsers();

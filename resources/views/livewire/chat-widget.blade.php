@@ -6,6 +6,8 @@
         subscribed: false,
         convName: null,
         convSub: null,
+        groupSub: null,
+        groupChannel: null,
         userChannel: null,
         showToast(msg, type = 'info', ms = 5000) {
             console.log('[Toast] Showing notification:', msg, 'Type:', type, 'Duration:', ms);
@@ -94,6 +96,33 @@
 
                 this.userChannel = window.Echo.private(channelName)
                     .listen('.MessageSent', onUserEvt)
+                    .listen('.approval.action', (data) => {
+                        console.info('[Chat] 🔔 Approval action received:', data);
+                        $wire.call('handleApprovalAction', data);
+                    })
+                    .listen('.ApprovalRequestCreated', (data) => {
+                        console.info('[Chat] 🔔 New approval request received:', data);
+                        
+                        // Show toast notification
+                        window.dispatchEvent(new CustomEvent('new-message-notification', {
+                            detail: {
+                                message: data.message || 'New material release request',
+                                type: 'info',
+                                duration: 8000
+                            }
+                        }));
+                        
+                        // Browser notification
+                        window.dispatchEvent(new CustomEvent('browserNotification', {
+                            detail: {
+                                message: data.message || 'New material release request',
+                                senderName: data.requester_name || 'User'
+                            }
+                        }));
+                        
+                        // Refresh messages if viewing that conversation
+                        $wire.call('loadMessages');
+                    })
                     .subscribed(() => {
                         console.info('[Chat] ✅ Successfully subscribed to user channel:', channelName);
                     })
@@ -162,20 +191,82 @@
                 console.error('[Chat] ❌ Echo conversation subscribe error:', err);
             }
         },
+        setupGroupChat() {
+            if (!window.Echo) return;
+            
+            const groupId = 'all-users';
+            const channelName = `group.${groupId}`;
+            
+            if (this.groupChannel === channelName && this.groupSub) {
+                console.info('[Chat] ℹ️ Already subscribed to group chat:', channelName);
+                return;
+            }
+
+            try {
+                // Leave previous group channel if any
+                if (this.groupSub && this.groupChannel) {
+                    console.info('[Chat] 👋 Leaving previous group chat:', this.groupChannel);
+                    window.Echo.leave(this.groupChannel);
+                    this.groupSub = null;
+                }
+                
+                console.info('[Chat] 🔌 Setting up group chat channel:', channelName);
+                this.groupChannel = channelName;
+                
+                const onGroupEvt = (data) => {
+                    console.info('[Chat] 👥 Group message received:', data);
+                    
+                    if (data && data.message_id) {
+                        console.info('[Chat] 🔄 Refreshing group messages...');
+                        $wire.call('loadMessages').then(() => {
+                            setTimeout(() => {
+                                window.dispatchEvent(new CustomEvent('messagesLoaded'));
+                                window.dispatchEvent(new CustomEvent('messages-updated'));
+                            }, 50);
+                        });
+                    } else {
+                        console.warn('[Chat] ⚠️ Invalid group data:', data);
+                    }
+                };
+
+                this.groupSub = window.Echo.private(channelName)
+                    .listen('.MessageSent', onGroupEvt)
+                    .subscribed(() => {
+                        console.info('[Chat] ✅ Successfully subscribed to group chat:', channelName);
+                    })
+                    .error((err) => {
+                        console.error('[Chat] ❌ Group chat channel error:', err);
+                    });
+                    
+                console.info('[Chat] ✓ Group chat channel setup complete:', channelName);
+            } catch (err) {
+                console.error('[Chat] ❌ Echo group chat subscribe error:', err);
+            }
+        },
         cleanup() {
             if (this.convSub && this.convName) {
                 window.Echo.leave(this.convName);
                 this.convSub = null;
                 this.convName = null;
             }
+            if (this.groupSub && this.groupChannel) {
+                window.Echo.leave(this.groupChannel);
+                this.groupSub = null;
+                this.groupChannel = null;
+            }
         }
      }"
      x-init="setupEcho({{ auth()->id() }})"
      x-effect="
         if ($wire.selectedUser) { setupConversation($wire.selectedUser.id) }
+        if ($wire.isGroupChat) { setupGroupChat() }
         if (!$wire.isOpen && convName) {
             if (window.Echo) { window.Echo.leave(convName) }
             convName = null; convSub = null;
+        }
+        if (!$wire.isGroupChat && groupSub) {
+            if (window.Echo && groupChannel) { window.Echo.leave(groupChannel) }
+            groupSub = null; groupChannel = null;
         }
      "
      @new-message-notification.window="console.log('[Event] new-message-notification received:', $event.detail); let data = $event.detail[0] || $event.detail; showToast(data.message, data.type, data.duration)"
@@ -195,6 +286,25 @@
                     <input type="text" wire:model.live="search" placeholder="Search..." class="w-full px-3 sm:px-4 py-2 sm:py-2.5 bg-[#1a1f2e] border border-red-500/30 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 text-xs sm:text-sm text-gray-200 placeholder-gray-500 transition-all">
                 </div>
                 <div class="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-red-500/50 scrollbar-track-transparent">
+                    <!-- Group Chat Option -->
+                    <div wire:click="selectGroupChat" class="p-2.5 sm:p-3 hover:bg-red-500/10 cursor-pointer border-b-2 border-red-500/30 transition-all duration-200 {{ $isGroupChat ? 'bg-gradient-to-r from-red-500/20 to-red-600/10 border-l-4 border-l-red-500' : '' }}">
+                        <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
+                            <div class="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-full flex items-center justify-center border-2 border-yellow-400/50 shadow-lg shadow-yellow-500/30 flex-shrink-0">
+                                <x-heroicon-o-user-group class="w-5 h-5 text-white" />
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-semibold text-gray-100 truncate">IT Department</p>
+                                <p class="text-xs text-gray-400">Everyone in the system</p>
+                            </div>
+                            @if($groupUnreadCount > 0 && !$isGroupChat)
+                                <sup class="ml-auto inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-gradient-to-r from-yellow-500 to-orange-600 text-white text-[10px] font-bold shadow-lg shadow-yellow-500/50 animate-pulse">
+                                    {{ $groupUnreadCount }}
+                                </sup>
+                            @endif
+                        </div>
+                    </div>
+                    
+                    <!-- Individual Users -->
                     @foreach($users as $user)
                         <div wire:click="selectUser({{ $user->id }})" class="p-2.5 sm:p-3 hover:bg-red-500/10 cursor-pointer border-b border-red-500/10 transition-all duration-200 {{ $selectedUser && $selectedUser->id == $user->id ? 'bg-gradient-to-r from-red-500/20 to-red-600/10 border-l-4 border-l-red-500' : '' }}">
                             <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
@@ -227,10 +337,12 @@
                     <div class="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
                         <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse shadow-lg shadow-green-400/50 flex-shrink-0"></div>
                         <span class="font-bold text-base sm:text-lg truncate">
-                            @if($selectedUser)
+                            @if($isGroupChat)
+                                IT Department
+                            @elseif($selectedUser)
                                 {{ $selectedUser->name }}
                             @else
-                                Select a user to chat
+                                Select a chat
                             @endif
                         </span>
                     </div>
@@ -239,7 +351,7 @@
                     </button>
                 </div>
 
-                @if($selectedUser)
+                @if($isGroupChat || $selectedUser)
                     <div
                         class="flex-1 p-3 sm:p-4 overflow-y-auto overflow-x-hidden bg-[#0d1117] scrollbar-thin scrollbar-thumb-red-500/50 scrollbar-track-transparent"
                         id="messages-container"
@@ -256,6 +368,53 @@
                                     <div class="text-[10px] opacity-75 mb-1 font-medium truncate">{{ $message->user->name }}</div>
                                     <div class="text-sm leading-relaxed break-words whitespace-pre-wrap overflow-wrap-anywhere">{{ $message->message }}</div>
                                     <div class="text-[10px] opacity-70 mt-1.5 text-right">{{ $message->created_at->diffForHumans() }}</div>
+                                    
+                                    {{-- Approval Request Buttons --}}
+                                    @if($message->approvalRequest && 
+                                        $message->user_id != auth()->id() && 
+                                        in_array(auth()->user()->role, ['system_admin', 'developer']))
+                                        
+                                        @if($message->approvalRequest->isPending())
+                                            <div class="mt-3 pt-3 border-t border-white/20 flex flex-col sm:flex-row gap-2">
+                                                <button 
+                                                    wire:click="approveFromChat({{ $message->approvalRequest->id }}, {{ $message->id }})"
+                                                    class="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition-colors duration-200 flex items-center justify-center gap-1.5"
+                                                >
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                                    </svg>
+                                                    Approve & Release
+                                                </button>
+                                                <button 
+                                                    wire:click="declineFromChat({{ $message->approvalRequest->id }}, {{ $message->id }}, 'Declined from chat')"
+                                                    class="flex-1 px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition-colors duration-200 flex items-center justify-center gap-1.5"
+                                                >
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                                    </svg>
+                                                    Decline
+                                                </button>
+                                            </div>
+                                        @elseif($message->approvalRequest->isApproved())
+                                            <div class="mt-3 pt-3 border-t border-white/20">
+                                                <div class="px-2.5 py-1.5 bg-green-500/20 border border-green-500/30 rounded-lg text-[10px] text-green-300 flex items-center gap-1.5">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                    </svg>
+                                                    <span>Approved by {{ $message->approvalRequest->reviewer->name ?? 'System Admin' }}</span>
+                                                </div>
+                                            </div>
+                                        @elseif($message->approvalRequest->isDeclined())
+                                            <div class="mt-3 pt-3 border-t border-white/20">
+                                                <div class="px-2.5 py-1.5 bg-red-500/20 border border-red-500/30 rounded-lg text-[10px] text-red-300 flex items-center gap-1.5">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                    </svg>
+                                                    <span>Declined by {{ $message->approvalRequest->reviewer->name ?? 'System Admin' }}</span>
+                                                </div>
+                                            </div>
+                                        @endif
+                                    @endif
                                 </div>
                             </div>
                         @endforeach
@@ -283,7 +442,7 @@
                                 <x-heroicon-o-chat-bubble-left-right class="w-20 h-20 mx-auto text-red-500/30" />
                                 <div class="absolute inset-0 bg-red-500/10 blur-xl rounded-full"></div>
                             </div>
-                            <p class="text-gray-400 px-4 text-sm">Select a user from the sidebar to start chatting</p>
+                            <p class="text-gray-400 px-4 text-sm">Select a chat to start messaging</p>
                         </div>
                     </div>
                 @endif
@@ -291,7 +450,7 @@
         </div>
         </div>
     @else
-        @php($__totalUnread = array_sum($unreadCounts ?? []))
+        @php($__totalUnread = array_sum($unreadCounts ?? []) + ($groupUnreadCount ?? 0))
         <button wire:click="toggleChat" class="relative bg-red-500 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg hover:bg-red-600 transition-all duration-200">
             <x-heroicon-o-chat-bubble-left-right class="w-7 h-7" />
             @if($__totalUnread > 0)

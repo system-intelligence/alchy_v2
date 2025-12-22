@@ -7,6 +7,11 @@ use App\Models\Client;
 use App\Models\Expense;
 use App\Models\History;
 use App\Models\Inventory;
+use App\Models\MaterialReleaseApproval;
+use App\Models\User;
+use App\Models\Chat;
+use App\Notifications\MaterialReleaseApprovalRequest;
+use App\Events\ApprovalRequestCreated;
 use Illuminate\Database\Eloquent\Collection;
 use Livewire\Component;
 use Livewire\WithFileUploads;
@@ -224,16 +229,150 @@ class Masterlist extends Component
     }
 
     /**
+     * Submit material release approval request for regular users
+     */
+    protected function submitMasterlistApprovalRequest(Client $client): void
+    {
+        \DB::beginTransaction();
+        try {
+            // Get all system admins
+            $systemAdmins = User::where('role', 'system_admin')->get();
+            
+            if ($systemAdmins->isEmpty()) {
+                \Log::warning('No system administrators found for masterlist approval');
+                session()->flash('error', 'No system administrators available to approve your request.');
+                $this->closeModal();
+                \DB::rollBack();
+                return;
+            }
+
+            \Log::info('Masterlist approval request from user: ' . auth()->user()->name);
+
+            // Validate inventory availability
+            $inventories = Inventory::whereIn('id', collect($this->releaseItems)->pluck('inventory_id'))->get()->keyBy('id');
+            
+            foreach ($this->releaseItems as $item) {
+                $inventory = $inventories->get($item['inventory_id']);
+                if (!$inventory) {
+                    session()->flash('error', 'One of the selected inventory items not found.');
+                    $this->closeModal();
+                    \DB::rollBack();
+                    return;
+                }
+                
+                if ($item['quantity_used'] > $inventory->quantity) {
+                    session()->flash('error', "Quantity for {$inventory->brand} exceeds available stock ({$inventory->quantity}).");
+                    $this->closeModal();
+                    \DB::rollBack();
+                    return;
+                }
+            }
+
+            // Create approval requests for each item
+            foreach ($this->releaseItems as $item) {
+                $inventory = $inventories->get($item['inventory_id']);
+                
+                // Create chat message
+                try {
+                    $chat = Chat::create([
+                        'user_id' => auth()->id(),
+                        'recipient_id' => $systemAdmins->first()->id,
+                        'message' => "📋 Material Release Request from Masterlist\n\nClient: {$client->name}\nItem: {$inventory->brand} - {$inventory->description}\nQuantity: {$item['quantity_used']}\nCost per unit: {$item['cost_per_unit']}",
+                    ]);
+                } catch (\Exception $e) {
+                    \Log::error('Failed to create chat for masterlist approval: ' . $e->getMessage());
+                    $chat = null;
+                }
+
+                // Create approval request
+                $approval = MaterialReleaseApproval::create([
+                    'requested_by' => auth()->id(),
+                    'inventory_id' => $inventory->id,
+                    'quantity_requested' => $item['quantity_used'],
+                    'reason' => "Material release for client: {$client->name}",
+                    'status' => 'pending',
+                    'chat_id' => $chat ? $chat->id : null,
+                ]);
+
+                \Log::info('Masterlist approval request created with ID: ' . $approval->id);
+
+                // Create history entry for the request
+                \App\Models\History::create([
+                    'user_id' => auth()->id(),
+                    'action' => 'Material Release Request Created',
+                    'model' => 'MaterialReleaseApproval',
+                    'model_id' => $approval->id,
+                    'changes' => json_encode([
+                        'status' => 'pending',
+                        'client' => $client->name,
+                        'material' => $inventory->material_name,
+                        'quantity' => $item['quantity_used'],
+                        'cost_per_unit' => $item['cost_per_unit'],
+                        'reason' => "Material release for client: {$client->name}",
+                        'requested_at' => now()->toDateTimeString(),
+                    ]),
+                    'old_values' => null,
+                ]);
+
+                // Broadcast history creation event
+                try {
+                    $historyEntry = \App\Models\History::where('user_id', auth()->id())
+                        ->where('model', 'MaterialReleaseApproval')
+                        ->where('model_id', $approval->id)
+                        ->latest()
+                        ->first();
+                    if ($historyEntry) {
+                        event(new \App\Events\HistoryEntryCreated($historyEntry));
+                    }
+                } catch (\Exception $e) {
+                    \Log::error('Failed to broadcast history event: ' . $e->getMessage());
+                }
+
+                // Broadcast real-time event
+                try {
+                    event(new ApprovalRequestCreated($approval));
+                } catch (\Exception $e) {
+                    \Log::error('Failed to broadcast masterlist approval event: ' . $e->getMessage());
+                }
+
+                // Notify all system admins
+                foreach ($systemAdmins as $admin) {
+                    try {
+                        $admin->notify(new MaterialReleaseApprovalRequest($approval));
+                    } catch (\Exception $e) {
+                        \Log::error('Failed to notify admin for masterlist approval: ' . $e->getMessage());
+                    }
+                }
+            }
+
+            \DB::commit();
+            
+            $this->closeModal();
+            $this->resetReleaseForm();
+            
+            session()->flash('message', '✅ Material release request sent to System Admin for approval. Materials will NOT be released until approved.');
+            
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            \Log::error('Masterlist approval request failed: ' . $e->getMessage());
+            session()->flash('error', 'Unable to submit approval request: ' . $e->getMessage());
+            $this->closeModal();
+        }
+    }
+
+    /**
      * Process inventory release to client.
      * Creates expenses and updates inventory quantities.
      */
     public function saveRelease(): void
     {
-        // Check permissions (admin or user can release)
-        if (!auth()->check() || (!auth()->user()->isSystemAdmin() && !auth()->user()->isUser())) {
-            abort(403, 'Access denied. Insufficient privileges.');
+        // Check permissions
+        if (!auth()->check()) {
+            abort(403, 'Access denied. You must be logged in.');
         }
 
+        $user = auth()->user();
+        
         $this->validate([
             'client_id' => 'required|exists:clients,id',
             'releaseItems' => 'required|array|min:1',
@@ -248,6 +387,18 @@ class Masterlist extends Component
             return;
         }
 
+        // Regular users must request approval
+        if ($user->role === 'user') {
+            $this->submitMasterlistApprovalRequest($client);
+            return;
+        }
+        
+        // System Admin/Developer: Direct release
+        if (!$user->isSystemAdmin() && !$user->isDeveloper()) {
+            abort(403, 'Access denied. Insufficient privileges.');
+        }
+
+        // Continue with direct release for admins
         try {
             $createdExpenses = [];
             $updatedInventories = [];
@@ -390,6 +541,16 @@ class Masterlist extends Component
                     return;
                 }
 
+                // Capture old values before update
+                $oldValues = [
+                    'brand' => $inventory->brand,
+                    'description' => $inventory->description,
+                    'category' => $inventory->category,
+                    'quantity' => $inventory->quantity,
+                    'min_stock_level' => $inventory->min_stock_level,
+                    'status' => $inventory->status
+                ];
+
                 $inventory->update([
                     'brand' => $this->brand,
                     'description' => $this->description,
@@ -399,12 +560,13 @@ class Masterlist extends Component
                     'status' => $status->value,
                 ]);
 
-                // Log history
+                // Log history with old and new values
                 History::create([
                     'user_id' => auth()->id(),
                     'action' => 'update',
                     'model' => 'inventory',
                     'model_id' => $inventory->id,
+                    'old_values' => $oldValues,
                     'changes' => [
                         'brand' => $this->brand,
                         'description' => $this->description,
@@ -482,14 +644,26 @@ class Masterlist extends Component
             session()->flash('message', 'Inventory not found.');
             return;
         }
-        $name = $inventory->brand . ' / ' . $inventory->description;
+
+        // Capture all inventory details before deletion
+        $inventoryDetails = [
+            'brand' => $inventory->brand,
+            'description' => $inventory->description,
+            'category' => $inventory->category,
+            'quantity' => $inventory->quantity,
+            'min_stock_level' => $inventory->min_stock_level,
+            'status' => $inventory->status instanceof InventoryStatus ? $inventory->status->value : $inventory->status,
+            'has_image' => $inventory->hasImageBlob(),
+            'deleted' => true
+        ];
+
         $inventory->delete();
         History::create([
             'user_id' => auth()->id(),
             'action' => 'delete',
             'model' => 'inventory',
             'model_id' => $this->deleteInventoryId,
-            'changes' => ['name' => $name, 'deleted' => true],
+            'changes' => $inventoryDetails,
         ]);
 
         $this->loadInventories();
@@ -542,13 +716,25 @@ class Masterlist extends Component
         $inventories = Inventory::whereIn('id', $this->selectedItems)->get();
 
         foreach ($inventories as $inventory) {
-            $name = $inventory->brand . ' / ' . $inventory->description;
+            // Capture all inventory details before deletion
+            $inventoryDetails = [
+                'brand' => $inventory->brand,
+                'description' => $inventory->description,
+                'category' => $inventory->category,
+                'quantity' => $inventory->quantity,
+                'min_stock_level' => $inventory->min_stock_level,
+                'status' => $inventory->status instanceof InventoryStatus ? $inventory->status->value : $inventory->status,
+                'has_image' => $inventory->hasImageBlob(),
+                'deleted' => true,
+                'bulk_delete' => true
+            ];
+
             History::create([
                 'user_id' => auth()->id(),
                 'action' => 'delete',
                 'model' => 'inventory',
                 'model_id' => $inventory->id,
-                'changes' => ['name' => $name, 'deleted' => true, 'bulk_delete' => true],
+                'changes' => $inventoryDetails,
             ]);
             $inventory->delete();
         }

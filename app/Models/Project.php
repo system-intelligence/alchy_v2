@@ -21,7 +21,6 @@ class Project extends Model
         'in_progress',
         'completed',
         'warranty',
-        'archived',
     ];
 
     /**

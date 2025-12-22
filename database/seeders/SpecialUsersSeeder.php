@@ -15,7 +15,7 @@ class SpecialUsersSeeder extends Seeder
     {
         \App\Models\User::updateOrCreate(
             ['email' => 'developer@example.com'],
-            [
+            [   
                 'name' => 'Developer',
                 'password' => bcrypt('password'),
                 'role' => 'developer',

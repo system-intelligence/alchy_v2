@@ -1,7 +1,39 @@
-<div>
+<div x-data="{
+    onlineUsers: @entangle('onlineUsers'),
+    presenceChannel: null,
+    init() {
+        if (window.Echo) {
+            this.presenceChannel = window.Echo.join('online')
+                .here((users) => {
+                    console.log('[Presence] Currently online:', users);
+                    this.onlineUsers = users.map(u => u.id);
+                })
+                .joining((user) => {
+                    console.log('[Presence] User joined:', user);
+                    if (!this.onlineUsers.includes(user.id)) {
+                        this.onlineUsers.push(user.id);
+                    }
+                    @this.call('updateUserStatus', user.id, true);
+                })
+                .leaving((user) => {
+                    console.log('[Presence] User left:', user);
+                    this.onlineUsers = this.onlineUsers.filter(id => id !== user.id);
+                    @this.call('updateUserStatus', user.id, false);
+                });
+        }
+    }
+}">
     <div class="p-6 border-b border-gray-200 dark:border-gray-700">
         <div class="flex items-center justify-between">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">User Management ({{ $users->count() }} total)</h3>
+            <div>
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">User Management ({{ $users->count() }} total)</h3>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    <span class="inline-flex items-center gap-1">
+                        <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                        <span x-text="onlineUsers.length"></span> online now
+                    </span>
+                </p>
+            </div>
             <button wire:click="openModal" class="bg-blue-500 hover:bg-blue-700 text-white font-semibold py-1.5 px-3 rounded text-sm flex items-center gap-2">
                 <x-heroicon-o-plus class="w-4 h-4" />
                 Add User
@@ -22,6 +54,8 @@
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">User</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Role</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Last Login</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Last Logout</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Joined</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -53,11 +87,54 @@
                         </span>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
-                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full
-                            @if($user->isOnline()) bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200
-                            @else bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 @endif">
-                            {{ $user->isOnline() ? 'Online' : 'Offline' }}
+                        <span 
+                            x-data="{ isOnline: onlineUsers.includes({{ $user->id }}) }"
+                            x-effect="isOnline = onlineUsers.includes({{ $user->id }})"
+                            :class="isOnline ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'"
+                            class="px-2 py-1 inline-flex items-center gap-1.5 text-xs leading-5 font-semibold rounded-full transition-all duration-300">
+                            <span 
+                                :class="isOnline ? 'bg-green-500' : 'bg-gray-400'"
+                                class="w-1.5 h-1.5 rounded-full transition-all duration-300"
+                                x-show="isOnline"
+                                x-transition
+                                style="animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;">
+                            </span>
+                            <span x-text="isOnline ? 'Online' : 'Offline'"></span>
                         </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        @if($user->last_login_at)
+                            <div class="text-sm text-gray-900 dark:text-white">{{ $user->last_login_at->format('M d, Y') }}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">{{ $user->last_login_at->format('h:i A') }}</div>
+                            @if($user->last_login_ip)
+                                <div class="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1 mt-0.5">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path>
+                                    </svg>
+                                    {{ $user->last_login_ip }}
+                                </div>
+                            @endif
+                        @else
+                            <span class="text-sm text-gray-400 dark:text-gray-500">Never</span>
+                        @endif
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        @if($user->last_logout_at)
+                            <div class="text-sm text-gray-900 dark:text-white">{{ $user->last_logout_at->format('M d, Y') }}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">{{ $user->last_logout_at->format('h:i A') }}</div>
+                            @if($user->last_login_at && $user->last_logout_at)
+                                @php
+                                    $duration = $user->last_login_at->diff($user->last_logout_at);
+                                    $hours = $duration->h + ($duration->days * 24);
+                                    $minutes = $duration->i;
+                                @endphp
+                                <div class="text-xs text-blue-500 dark:text-blue-400 mt-0.5">
+                                    Session: {{ $hours > 0 ? $hours . 'h ' : '' }}{{ $minutes }}m
+                                </div>
+                            @endif
+                        @else
+                            <span class="text-sm text-gray-400 dark:text-gray-500">Never</span>
+                        @endif
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {{ $user->created_at->format('M d, Y') }}
@@ -160,4 +237,15 @@
             </div>
         </div>
     @endif
+
+    <style>
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+    </style>
 </div>

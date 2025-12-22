@@ -20,6 +20,9 @@ use Spatie\MediaLibrary\InteractsWithMedia;
  * @property string $password
  * @property string $role
  * @property \Carbon\Carbon|null $last_seen
+ * @property \Carbon\Carbon|null $last_login_at
+ * @property \Carbon\Carbon|null $last_logout_at
+ * @property string|null $last_login_ip
  * @property \Carbon\Carbon|null $email_verified_at
  * @property \Carbon\Carbon $created_at
  * @property \Carbon\Carbon $updated_at
@@ -39,6 +42,9 @@ class User extends Authenticatable implements HasMedia
         'password',
         'role',
         'last_seen',
+        'last_login_at',
+        'last_logout_at',
+        'last_login_ip',
     ];
 
     /**
@@ -62,6 +68,8 @@ class User extends Authenticatable implements HasMedia
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'last_seen' => 'datetime',
+            'last_login_at' => 'datetime',
+            'last_logout_at' => 'datetime',
         ];
     }
 
@@ -161,6 +169,30 @@ class User extends Authenticatable implements HasMedia
     public function updateLastSeen(): void
     {
         $this->update(['last_seen' => now()]);
+    }
+
+    /**
+     * Record user login.
+     *
+     * @param string|null $ip
+     * @return void
+     */
+    public function recordLogin(?string $ip = null): void
+    {
+        $this->update([
+            'last_login_at' => now(),
+            'last_login_ip' => $ip ?? request()->ip(),
+        ]);
+    }
+
+    /**
+     * Record user logout.
+     *
+     * @return void
+     */
+    public function recordLogout(): void
+    {
+        $this->update(['last_logout_at' => now()]);
     }
 
     /**
