@@ -31,7 +31,7 @@ class ApprovalManagement extends Component
     protected function ensureSystemAdmin()
     {
         $user = auth()->user();
-        if ($user->role !== 'system_admin' && !$user->isDeveloper()) {
+        if ($user->role !== 'system_admin') {
             abort(403, 'Unauthorized access.');
         }
     }
@@ -94,6 +94,51 @@ class ApprovalManagement extends Component
             // Approve the request
             $approval->approve(auth()->id(), $notes ?: $this->reviewNotes);
 
+            // Update existing history entry or create new
+            $existingHistory = History::where('model', 'MaterialReleaseApproval')
+                ->where('model_id', $approval->id)
+                ->first();
+
+            if ($existingHistory) {
+                // Update existing history with completion details
+                $existingHistory->update([
+                    'action' => 'Approval Request Completed',
+                    'changes' => json_encode([
+                        'status' => 'approved',
+                        'project' => $approval->project ?? 'N/A',
+                        'client' => $approval->client ?? 'N/A',
+                        'material' => $approval->inventory->material_name,
+                        'quantity' => $approval->quantity_requested,
+                        'reviewer' => auth()->user()->name,
+                        'completed_at' => now()->toDateTimeString(),
+                    ]),
+                ]);
+                $approvalHistory = $existingHistory;
+            } else {
+                // Create new if not found
+                $approvalHistory = History::create([
+                    'user_id' => $approval->requested_by,
+                    'action' => 'Approval Request Completed',
+                    'model' => 'MaterialReleaseApproval',
+                    'model_id' => $approval->id,
+                    'changes' => json_encode([
+                        'status' => 'approved',
+                        'project' => $approval->project ?? 'N/A',
+                        'client' => $approval->client ?? 'N/A',
+                        'material' => $approval->inventory->material_name,
+                        'quantity' => $approval->quantity_requested,
+                        'reviewer' => auth()->user()->name,
+                        'completed_at' => now()->toDateTimeString(),
+                    ]),
+                    'old_values' => json_encode([
+                        'status' => 'pending'
+                    ])
+                ]);
+            }
+
+            // Broadcast history event
+            event(new HistoryEntryCreated($approvalHistory));
+
             // Send message to requester via chat
             if ($approval->chat) {
                 Chat::create([
@@ -131,6 +176,53 @@ class ApprovalManagement extends Component
         try {
             // Decline the request
             $approval->decline(auth()->id(), $notes ?: $this->reviewNotes);
+
+            // Update existing history entry or create new
+            $existingHistory = History::where('model', 'MaterialReleaseApproval')
+                ->where('model_id', $approval->id)
+                ->first();
+
+            if ($existingHistory) {
+                // Update existing history with completion details
+                $existingHistory->update([
+                    'action' => 'Approval Request Completed',
+                    'changes' => json_encode([
+                        'status' => 'declined',
+                        'project' => $approval->project ?? 'N/A',
+                        'client' => $approval->client ?? 'N/A',
+                        'material' => $approval->inventory->material_name,
+                        'quantity' => $approval->quantity_requested,
+                        'reviewer' => auth()->user()->name,
+                        'reason' => $notes ?: $this->reviewNotes,
+                        'completed_at' => now()->toDateTimeString(),
+                    ]),
+                ]);
+                $approvalHistory = $existingHistory;
+            } else {
+                // Create new if not found
+                $approvalHistory = History::create([
+                    'user_id' => $approval->requested_by,
+                    'action' => 'Approval Request Completed',
+                    'model' => 'MaterialReleaseApproval',
+                    'model_id' => $approval->id,
+                    'changes' => json_encode([
+                        'status' => 'declined',
+                        'project' => $approval->project ?? 'N/A',
+                        'client' => $approval->client ?? 'N/A',
+                        'material' => $approval->inventory->material_name,
+                        'quantity' => $approval->quantity_requested,
+                        'reviewer' => auth()->user()->name,
+                        'reason' => $notes ?: $this->reviewNotes,
+                        'completed_at' => now()->toDateTimeString(),
+                    ]),
+                    'old_values' => json_encode([
+                        'status' => 'pending'
+                    ])
+                ]);
+            }
+
+            // Broadcast history event
+            event(new HistoryEntryCreated($approvalHistory));
 
             // Send message to requester via chat
             if ($approval->chat) {

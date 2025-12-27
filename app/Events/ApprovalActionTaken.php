@@ -44,9 +44,9 @@ class ApprovalActionTaken implements ShouldBroadcastNow
             new PrivateChannel('App.Models.User.' . $this->requesterId),
         ];
 
-        // Also broadcast to all system admins and developers
-        $admins = User::whereIn('role', ['system_admin', 'developer'])->get();
-        foreach ($admins as $admin) {
+        // Also broadcast to all system admins
+        $systemAdmins = User::where('role', 'system_admin')->get();
+        foreach ($systemAdmins as $admin) {
             $channels[] = new PrivateChannel('App.Models.User.' . $admin->id);
         }
 

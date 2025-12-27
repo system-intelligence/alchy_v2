@@ -857,15 +857,22 @@ class Expenses extends Component
             foreach ($items as $item) {
                 $inventory = $inventories->get($item['inventory_id']);
                 
-                try {
-                    $chat = Chat::create([
-                        'user_id' => auth()->id(),
-                        'recipient_id' => $systemAdmins->first()->id,
-                        'message' => "📋 Material Release Request\n\nProject: {$project->reference_code}\nItem: {$inventory->brand} - {$inventory->description}\nQuantity: {$item['quantity']}\nReason: " . ($this->manageReleaseNotes ?: 'No reason provided'),
-                    ]);
-                } catch (\Exception $e) {
-                    \Log::error('Failed to create chat: ' . $e->getMessage());
-                    $chat = null;
+                // Create chat messages to ALL system admins (private messages)
+                $chatIds = [];
+                foreach ($systemAdmins as $admin) {
+                    try {
+                        $chat = Chat::create([
+                            'user_id' => auth()->id(),
+                            'recipient_id' => $admin->id,
+                            'message' => "📋 Material Release Request\n\nProject: {$project->reference_code}\nItem: {$inventory->brand} - {$inventory->description}\nQuantity: {$item['quantity']}\nReason: " . ($this->manageReleaseNotes ?: 'No reason provided') . "\n\nApproval ID: {$approval->id}",
+                        ]);
+                        $chatIds[] = $chat->id;
+
+                        // Broadcast the chat message
+                        event(new \App\Events\MessageSent($chat));
+                    } catch (\Exception $e) {
+                        \Log::error('Failed to create chat for admin ' . $admin->id . ': ' . $e->getMessage());
+                    }
                 }
 
                 $approval = MaterialReleaseApproval::create([
@@ -874,7 +881,7 @@ class Expenses extends Component
                     'quantity_requested' => $item['quantity'],
                     'reason' => $this->manageReleaseNotes ?: "Material release for project {$project->reference_code}",
                     'status' => 'pending',
-                    'chat_id' => $chat ? $chat->id : null,
+                    'chat_id' => !empty($chatIds) ? $chatIds[0] : null,
                 ]);
 
                 // Create history entry for the request
@@ -1046,51 +1053,66 @@ class Expenses extends Component
                 \Log::info('Found ' . $systemAdmins->count() . ' system admins');
 
                 // Create approval requests for each item
-                foreach ($items as $item) {
-                    $inventory = $inventories->get($item['inventory_id']);
-                    
-                    // Create chat message (without triggering Pusher if it fails)
-                    try {
-                        $chat = Chat::create([
-                            'user_id' => auth()->id(),
-                            'recipient_id' => $systemAdmins->first()->id,
-                            'message' => "📋 Material Release Request\n\nProject: {$project->reference_code}\nItem: {$inventory->brand} - {$inventory->description}\nQuantity: {$item['quantity']}\nReason: " . ($this->manageReleaseNotes ?: 'No reason provided'),
-                        ]);
-                        
-                        \Log::info('Chat created with ID: ' . $chat->id);
-                    } catch (\Exception $e) {
-                        \Log::error('Failed to create chat: ' . $e->getMessage());
-                        // Continue even if chat fails
-                        $chat = null;
-                    }
+                 foreach ($items as $item) {
+                     $inventory = $inventories->get($item['inventory_id']);
 
-                    $approval = MaterialReleaseApproval::create([
-                        'requested_by' => auth()->id(),
-                        'inventory_id' => $inventory->id,
-                        'quantity_requested' => $item['quantity'],
-                        'reason' => $this->manageReleaseNotes ?: "Material release for project {$project->reference_code}",
-                        'status' => 'pending',
-                        'chat_id' => $chat ? $chat->id : null,
-                    ]);
+                     // Create approval request first
+                     $approval = MaterialReleaseApproval::create([
+                         'requested_by' => auth()->id(),
+                         'inventory_id' => $inventory->id,
+                         'quantity_requested' => $item['quantity'],
+                         'reason' => $this->manageReleaseNotes ?: "Material release for project {$project->reference_code}",
+                         'status' => 'pending',
+                         'chat_id' => null, // Will be set after creating chats
+                     ]);
 
-                    \Log::info('Approval request created with ID: ' . $approval->id);
+                     \Log::info('Approval request created with ID: ' . $approval->id);
 
-                    // Try to broadcast event (don't fail if Pusher is down)
-                    try {
-                        event(new ApprovalRequestCreated($approval));
-                    } catch (\Exception $e) {
-                        \Log::error('Failed to broadcast event: ' . $e->getMessage());
-                    }
+                     // Create chat messages to ALL system admins
+                     $chatIds = [];
+                     foreach ($systemAdmins as $admin) {
+                         try {
+                             $chat = Chat::create([
+                                 'user_id' => auth()->id(),
+                                 'recipient_id' => $admin->id,
+                                 'message' => "📋 Material Release Request\n\nProject: {$project->reference_code}\nItem: {$inventory->brand} - {$inventory->description}\nQuantity: {$item['quantity']}\nReason: " . ($this->manageReleaseNotes ?: 'No reason provided') . "\n\nApproval ID: {$approval->id}",
+                             ]);
 
-                    // Notify all system admins
-                    foreach ($systemAdmins as $admin) {
-                        try {
-                            $admin->notify(new MaterialReleaseApprovalRequest($approval));
-                        } catch (\Exception $e) {
-                            \Log::error('Failed to notify admin ' . $admin->id . ': ' . $e->getMessage());
-                        }
-                    }
-                }
+                             $chatIds[] = $chat->id;
+                             \Log::info('Chat created with ID: ' . $chat->id . ' for admin: ' . $admin->id);
+
+                             // Broadcast the chat message
+                             try {
+                                 event(new \App\Events\MessageSent($chat));
+                             } catch (\Exception $e) {
+                                 \Log::error('Failed to broadcast chat message: ' . $e->getMessage());
+                             }
+                         } catch (\Exception $e) {
+                             \Log::error('Failed to create chat for admin ' . $admin->id . ': ' . $e->getMessage());
+                         }
+                     }
+
+                     // Update approval with first chat ID (for reference)
+                     if (!empty($chatIds)) {
+                         $approval->update(['chat_id' => $chatIds[0]]);
+                     }
+
+                     // Try to broadcast event (don't fail if Pusher is down)
+                     try {
+                         event(new ApprovalRequestCreated($approval));
+                     } catch (\Exception $e) {
+                         \Log::error('Failed to broadcast event: ' . $e->getMessage());
+                     }
+
+                     // Notify all system admins
+                     foreach ($systemAdmins as $admin) {
+                         try {
+                             $admin->notify(new MaterialReleaseApprovalRequest($approval));
+                         } catch (\Exception $e) {
+                             \Log::error('Failed to notify admin ' . $admin->id . ': ' . $e->getMessage());
+                         }
+                     }
+                 }
 
                 DB::commit();
                 

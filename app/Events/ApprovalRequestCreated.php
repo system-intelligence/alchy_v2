@@ -30,18 +30,18 @@ class ApprovalRequestCreated implements ShouldBroadcastNow
      *
      * @return array<int, \Illuminate\Broadcasting\Channel>
      */
-    public function broadcastOn(): array
-    {
-        $channels = [];
-        
-        // Broadcast to all system admins and developers
-        $admins = \App\Models\User::whereIn('role', ['system_admin', 'developer'])->get();
-        foreach ($admins as $admin) {
-            $channels[] = new PrivateChannel('App.Models.User.' . $admin->id);
-        }
-        
-        return $channels;
-    }
+     public function broadcastOn(): array
+     {
+         $channels = [];
+
+         // Broadcast to all system admins
+         $systemAdmins = \App\Models\User::where('role', 'system_admin')->get();
+         foreach ($systemAdmins as $admin) {
+             $channels[] = new PrivateChannel('App.Models.User.' . $admin->id);
+         }
+
+         return $channels;
+     }
 
     /**
      * Broadcast payload

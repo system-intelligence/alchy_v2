@@ -82,12 +82,58 @@
                                 </div>
                             @endif
                             @if($history->model === 'MaterialReleaseApproval')
-                                @php $approval = App\Models\MaterialReleaseApproval::with('requester', 'reviewer', 'inventory', 'expense')->find($history->model_id); @endphp
+                                @php 
+                                    $approval = App\Models\MaterialReleaseApproval::with('requester', 'reviewer', 'inventory', 'expense', 'expense.client', 'expense.project')->find($history->model_id);
+                                    // Properly decode history changes - handle both string and array
+                                    $historyChanges = [];
+                                    if (is_string($history->changes)) {
+                                        $historyChanges = json_decode($history->changes, true) ?? [];
+                                    } elseif (is_array($history->changes)) {
+                                        $historyChanges = $history->changes;
+                                    }
+                                @endphp
                                 @if($approval)
                                     <div class="bg-gray-50 dark:bg-gray-900 px-3 py-2 rounded">
                                         <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">Request by:</span>
                                         <span class="text-sm font-medium text-gray-900 dark:text-white">{{ $approval->requester->name }}</span>
                                     </div>
+                                    @php
+                                        $clientName = null;
+                                        $projectName = null;
+
+                                        // Try to get from relationship first
+                                        if ($approval->expense && $approval->expense->client) {
+                                            $clientName = $approval->expense->client->name;
+                                        }
+                                        // Fallback to history changes
+                                        if (!$clientName && !empty($historyChanges['client']) && $historyChanges['client'] !== 'N/A') {
+                                            $clientName = $historyChanges['client'];
+                                        }
+
+                                        // Try to get project from relationship first
+                                        if ($approval->expense && $approval->expense->project) {
+                                            $projectName = $approval->expense->project->name;
+                                        }
+                                        // Fallback to history changes
+                                        if (!$projectName && !empty($historyChanges['project']) && $historyChanges['project'] !== 'N/A') {
+                                            $projectName = $historyChanges['project'];
+                                        }
+
+                                        // Check user role - visible to user and system_admin
+                                        $userRole = auth()->user()?->role ?? auth()->user()?->getRoleNames()?->first() ?? '';
+                                    @endphp
+                                    @if(in_array($userRole, ['user', 'system_admin']) && $clientName)
+                                        <div class="bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded border border-blue-200 dark:border-blue-800">
+                                            <span class="text-xs font-semibold text-blue-700 dark:text-blue-300">Client:</span>
+                                            <span class="text-sm font-medium text-blue-900 dark:text-blue-100">{{ $clientName }}</span>
+                                        </div>
+                                    @endif
+                                    @if(in_array($userRole, ['user', 'system_admin']) && $projectName)
+                                        <div class="bg-purple-50 dark:bg-purple-900/20 px-3 py-2 rounded border border-purple-200 dark:border-purple-800">
+                                            <span class="text-xs font-semibold text-purple-700 dark:text-purple-300">Project:</span>
+                                            <span class="text-sm font-medium text-purple-900 dark:text-purple-100">{{ $projectName }}</span>
+                                        </div>
+                                    @endif
                                     <div class="bg-gray-50 dark:bg-gray-900 px-3 py-2 rounded">
                                         <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">Materials:</span>
                                         <span class="text-sm font-medium text-gray-900 dark:text-white">{{ $approval->inventory->brand }} {{ $approval->inventory->description }} ({{ $approval->quantity_requested }})</span>
@@ -116,12 +162,24 @@
                         {{-- Changes Summary --}}
                         @if($history->action === 'create')
                             @if($history->model === 'MaterialReleaseApproval')
-                                @php $approval = App\Models\MaterialReleaseApproval::with('expense.client', 'inventory')->find($history->model_id); @endphp
+                                @php 
+                                    $approval = App\Models\MaterialReleaseApproval::with('expense.client', 'expense.project', 'inventory')->find($history->model_id);
+                                    // Decode changes from create action
+                                    $createChanges = [];
+                                    if (is_string($history->changes)) {
+                                        $createChanges = json_decode($history->changes, true) ?? [];
+                                    } elseif (is_array($history->changes)) {
+                                        $createChanges = $history->changes;
+                                    }
+                                @endphp
                                 @if($approval && $approval->expense)
                                     <div class="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded">
                                         <div class="text-xs text-blue-700 dark:text-blue-300 mb-2 font-semibold">Material Release Request from Masterlist</div>
                                         <div class="text-sm text-blue-900 dark:text-blue-100 space-y-1">
-                                            <div><strong>Client:</strong> {{ $approval->expense->client->name }}</div>
+                                            <div><strong>Client:</strong> {{ $approval->expense->client->name ?? $createChanges['client'] ?? 'N/A' }}</div>
+                                            @if($approval->expense->project || (!empty($createChanges['project']) && $createChanges['project'] !== 'N/A'))
+                                                <div><strong>Project:</strong> {{ $approval->expense->project->name ?? $createChanges['project'] ?? 'N/A' }}</div>
+                                            @endif
                                             <div><strong>Item:</strong> {{ $approval->inventory->brand }} - {{ $approval->inventory->description }}</div>
                                             <div><strong>Quantity:</strong> {{ $approval->quantity_requested }}</div>
                                             <div><strong>Cost per unit:</strong> ₱{{ number_format($approval->expense->cost_per_unit, 2) }}</div>
@@ -233,7 +291,7 @@
     @if($showChangeModal && $selectedHistory)
         <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" wire:click="closeChangeModal">
             <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto"
-                wire:click.stop>
+                @click.stop="$event.stopPropagation()">
                 <div class="p-6">
                     <div class="flex items-center justify-between mb-6">
                         <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Change Details</h2>
@@ -263,7 +321,7 @@
                             </div>
                         </div>
                         @if($selectedHistory->model === 'MaterialReleaseApproval')
-                            @php $approval = App\Models\MaterialReleaseApproval::with('requester', 'reviewer', 'inventory', 'expense')->find($selectedHistory->model_id); @endphp
+                            @php $approval = App\Models\MaterialReleaseApproval::with('requester', 'reviewer', 'inventory', 'expense', 'expense.client', 'expense.project')->find($selectedHistory->model_id); @endphp
                             @if($approval)
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                                     <div>
@@ -274,6 +332,18 @@
                                         <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">Materials:</span>
                                         <div class="text-sm font-medium text-gray-900 dark:text-white">{{ $approval->inventory->brand }} {{ $approval->inventory->description }} ({{ $approval->quantity_requested }})</div>
                                     </div>
+                                    @if($approval->status === 'approved' && $approval->expense && $approval->expense->client)
+                                        <div>
+                                            <span class="text-xs font-semibold text-blue-700 dark:text-blue-300">Client:</span>
+                                            <div class="text-sm font-medium text-blue-900 dark:text-blue-100">{{ $approval->expense->client->name }}</div>
+                                        </div>
+                                    @endif
+                                    @if($approval->status === 'approved' && $approval->expense && $approval->expense->project)
+                                        <div>
+                                            <span class="text-xs font-semibold text-purple-700 dark:text-purple-300">Project:</span>
+                                            <div class="text-sm font-medium text-purple-900 dark:text-purple-100">{{ $approval->expense->project->name }}</div>
+                                        </div>
+                                    @endif
                                     @if($approval->expense)
                                         <div>
                                             <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">Cost:</span>
@@ -299,13 +369,46 @@
 
                     {{-- Request Details --}}
                     @if($selectedHistory->model === 'MaterialReleaseApproval')
-                        @php $approval = App\Models\MaterialReleaseApproval::with('expense.client', 'inventory', 'reviewer')->find($selectedHistory->model_id); @endphp
+                        @php $approval = App\Models\MaterialReleaseApproval::with('expense.client', 'expense.project', 'inventory', 'reviewer')->find($selectedHistory->model_id); @endphp
                         @if($approval && $approval->expense)
                             <div class="mb-6">
                                 <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Request Details</h3>
                                 <div class="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg p-6">
                                     <div class="text-sm text-blue-900 dark:text-blue-100 space-y-2">
-                                        <div><strong>Client:</strong> {{ $approval->expense->client->name }}</div>
+                                        @php
+                                            // Properly decode changes
+                                            $changes = [];
+                                            if (is_string($selectedHistory->changes)) {
+                                                $changes = json_decode($selectedHistory->changes, true) ?? [];
+                                            } elseif (is_array($selectedHistory->changes)) {
+                                                $changes = $selectedHistory->changes;
+                                            }
+                                            
+                                            // Get client name
+                                            $clientName = null;
+                                            if ($approval->expense && $approval->expense->client) {
+                                                $clientName = $approval->expense->client->name;
+                                            } elseif (!empty($changes['client']) && $changes['client'] !== 'N/A') {
+                                                $clientName = $changes['client'];
+                                            }
+                                            
+                                            // Get project name
+                                            $projectName = null;
+                                            if ($approval->expense && $approval->expense->project) {
+                                                $projectName = $approval->expense->project->name;
+                                            } elseif (!empty($changes['project']) && $changes['project'] !== 'N/A') {
+                                                $projectName = $changes['project'];
+                                            }
+                                            
+                                            // Check user role - visible to user and system_admin
+                                            $userRole = auth()->user()?->role ?? auth()->user()?->getRoleNames()?->first();
+                                        @endphp
+                                        @if(in_array($userRole, ['user', 'system_admin']) && $clientName)
+                                            <div><strong>Client:</strong> {{ $clientName }}</div>
+                                        @endif
+                                        @if(in_array($userRole, ['user', 'system_admin']) && $projectName)
+                                            <div><strong>Project:</strong> {{ $projectName }}</div>
+                                        @endif
                                         <div><strong>Item:</strong> {{ $approval->inventory->brand }} - {{ $approval->inventory->description }}</div>
                                         <div><strong>Quantity:</strong> {{ $approval->quantity_requested }}</div>
                                         <div><strong>Cost per unit:</strong> ₱{{ number_format($approval->expense->cost_per_unit, 2) }}</div>
@@ -435,7 +538,7 @@
                                         <div class="text-sm text-gray-600 dark:text-gray-400">Fields Logged</div>
                                     </div>
                                     <div class="text-center">
-                                        <div class="text-2xl font-bold text-green-600 dark:text-green-400">{{ count(array_diff_assoc($changes, $oldValues)) }}</div>
+                                        <div class="text-2xl font-bold text-green-600 dark:text-green-400">{{ is_array($changes) && is_array($oldValues) ? count(array_diff_assoc($changes, $oldValues)) : 0 }}</div>
                                         <div class="text-sm text-gray-600 dark:text-gray-400">Fields Changed</div>
                                     </div>
                                     <div class="text-center">
@@ -445,9 +548,70 @@
                                 </div>
                             @endif
                         </div>
+
+                        {{-- Approval Summary (if this is an approval action) --}}
+                        @if(in_array($selectedHistory->action, ['Approval Request Approved', 'Approval Request Declined', 'Material Release Request Approved', 'Material Release Request Declined']))
+                            @php
+                                $changes = is_array($selectedHistory->changes ?? []) ? $selectedHistory->changes : [];
+                            @endphp
+                            <div class="bg-gradient-to-r {{ str_contains($selectedHistory->action, 'Approved') ? 'from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-800' : 'from-red-50 to-rose-50 dark:from-red-900/20 dark:to-rose-900/20 border-red-200 dark:border-red-800' }} border rounded-lg p-6 mt-6">
+                                <h3 class="text-lg font-semibold {{ str_contains($selectedHistory->action, 'Approved') ? 'text-green-900 dark:text-green-100' : 'text-red-900 dark:text-red-100' }} mb-4">
+                                    {{ str_contains($selectedHistory->action, 'Approved') ? '✅ Approval Summary' : '❌ Decline Summary' }}
+                                </h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm {{ str_contains($selectedHistory->action, 'Approved') ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200' }}">
+                                    @if(!empty($changes['client']))
+                                        <div>
+                                            <span class="font-semibold">Client:</span>
+                                            <p class="mt-1">{{ $changes['client'] }}</p>
+                                        </div>
+                                    @endif
+                                    @if(!empty($changes['project']) && $changes['project'] !== 'N/A')
+                                        <div>
+                                            <span class="font-semibold">Project:</span>
+                                            <p class="mt-1">{{ $changes['project'] }}</p>
+                                        </div>
+                                    @endif
+                                    @if(!empty($changes['material']))
+                                        <div>
+                                            <span class="font-semibold">Material:</span>
+                                            <p class="mt-1">{{ $changes['material'] }}</p>
+                                        </div>
+                                    @endif
+                                    @if(!empty($changes['quantity']))
+                                        <div>
+                                            <span class="font-semibold">Quantity:</span>
+                                            <p class="mt-1">{{ $changes['quantity'] }} units</p>
+                                        </div>
+                                    @endif
+                                    @if(!empty($changes['reviewed_by']))
+                                        <div>
+                                            <span class="font-semibold">Reviewed by:</span>
+                                            <p class="mt-1">{{ $changes['reviewed_by'] }}</p>
+                                        </div>
+                                    @elseif(!empty($changes['approved_by']))
+                                        <div>
+                                            <span class="font-semibold">Approved by:</span>
+                                            <p class="mt-1">{{ $changes['approved_by'] }}</p>
+                                        </div>
+                                    @elseif(!empty($changes['declined_by']))
+                                        <div>
+                                            <span class="font-semibold">Declined by:</span>
+                                            <p class="mt-1">{{ $changes['declined_by'] }}</p>
+                                        </div>
+                                    @endif
+                                    @if(!empty($changes['reason']))
+                                        <div class="md:col-span-2">
+                                            <span class="font-semibold">Reason:</span>
+                                            <p class="mt-1">{{ $changes['reason'] }}</p>
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+                        @endif
                     @endif
                 </div>
             </div>
         </div>
     @endif
 </div>
+

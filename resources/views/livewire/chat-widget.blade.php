@@ -368,53 +368,30 @@
                                     <div class="text-[10px] opacity-75 mb-1 font-medium truncate">{{ $message->user->name }}</div>
                                     <div class="text-sm leading-relaxed break-words whitespace-pre-wrap overflow-wrap-anywhere">{{ $message->message }}</div>
                                     <div class="text-[10px] opacity-70 mt-1.5 text-right">{{ $message->created_at->diffForHumans() }}</div>
-                                    
-                                    {{-- Approval Request Buttons --}}
-                                    @if($message->approvalRequest && 
-                                        $message->user_id != auth()->id() && 
-                                        in_array(auth()->user()->role, ['system_admin', 'developer']))
-                                        
-                                        @if($message->approvalRequest->isPending())
-                                            <div class="mt-3 pt-3 border-t border-white/20 flex flex-col sm:flex-row gap-2">
-                                                <button 
-                                                    wire:click="approveFromChat({{ $message->approvalRequest->id }}, {{ $message->id }})"
-                                                    class="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition-colors duration-200 flex items-center justify-center gap-1.5"
-                                                >
-                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+
+                                    @if($this->shouldShowApprovalButtons($message))
+                                        <div class="mt-3 pt-3 border-t border-white/20 flex gap-2">
+                                            <button wire:click="approveFromChat({{ $this->getApprovalId($message) }}, {{ $message->id }})"
+                                                class="flex-1 px-4 py-2.5 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white text-sm font-semibold rounded-lg shadow-lg shadow-green-500/30 hover:shadow-green-500/50 transition-all duration-200 transform hover:scale-105 active:scale-95">
+                                                <span class="flex items-center justify-center gap-1">
+                                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
                                                     </svg>
                                                     Approve & Release
-                                                </button>
-                                                <button 
-                                                    wire:click="declineFromChat({{ $message->approvalRequest->id }}, {{ $message->id }}, 'Declined from chat')"
-                                                    class="flex-1 px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition-colors duration-200 flex items-center justify-center gap-1.5"
-                                                >
-                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                                </span>
+                                            </button>
+                                            <button wire:click="declineFromChat({{ $this->getApprovalId($message) }}, {{ $message->id }}, 'Declined from chat')"
+                                                class="flex-1 px-4 py-2.5 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-sm font-semibold rounded-lg shadow-lg shadow-red-500/30 hover:shadow-red-500/50 transition-all duration-200 transform hover:scale-105 active:scale-95">
+                                                <span class="flex items-center justify-center gap-1">
+                                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
                                                     </svg>
                                                     Decline
-                                                </button>
-                                            </div>
-                                        @elseif($message->approvalRequest->isApproved())
-                                            <div class="mt-3 pt-3 border-t border-white/20">
-                                                <div class="px-2.5 py-1.5 bg-green-500/20 border border-green-500/30 rounded-lg text-[10px] text-green-300 flex items-center gap-1.5">
-                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                                    </svg>
-                                                    <span>Approved by {{ $message->approvalRequest->reviewer->name ?? 'System Admin' }}</span>
-                                                </div>
-                                            </div>
-                                        @elseif($message->approvalRequest->isDeclined())
-                                            <div class="mt-3 pt-3 border-t border-white/20">
-                                                <div class="px-2.5 py-1.5 bg-red-500/20 border border-red-500/30 rounded-lg text-[10px] text-red-300 flex items-center gap-1.5">
-                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                                    </svg>
-                                                    <span>Declined by {{ $message->approvalRequest->reviewer->name ?? 'System Admin' }}</span>
-                                                </div>
-                                            </div>
-                                        @endif
+                                                </span>
+                                            </button>
+                                        </div>
                                     @endif
+                                    
                                 </div>
                             </div>
                         @endforeach
@@ -448,7 +425,6 @@
                 @endif
             </div>
         </div>
-        </div>
     @else
         @php($__totalUnread = array_sum($unreadCounts ?? []) + ($groupUnreadCount ?? 0))
         <button wire:click="toggleChat" class="relative bg-red-500 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg hover:bg-red-600 transition-all duration-200">
@@ -470,7 +446,7 @@
                  x-transition:enter-end="translate-x-0 opacity-100 scale-100"
                  x-transition:leave="transform transition ease-in duration-400"
                  x-transition:leave-start="translate-x-0 opacity-100 scale-100"
-                 x-transition:leave-end="translate-x-full opacity-0 scale-95"
+                 x-transition:leave-end="translate-x-full opacity-0 scale-95">
                 <div class="relative rounded-2xl px-5 py-4 shadow-2xl border-2 backdrop-blur-xl"
                      :class="{
                         'bg-gradient-to-r from-green-900/90 to-green-800/90 border-green-500/50': toast.type==='success',

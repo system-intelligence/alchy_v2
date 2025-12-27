@@ -26,11 +26,20 @@ class History extends Component
     {
         \Log::info('Loading histories for user: ' . auth()->id());
         $user = auth()->user();
-        if ($user->isDeveloper()) {
-            $this->histories = HistoryModel::with('user')->latest()->get();
+
+        // Get user's own histories
+        $userHistories = HistoryModel::where('user_id', $user->id)->with('user');
+
+        // Only system admins can see all approval request histories
+        if ($user->role === 'system_admin') {
+            $approvalHistories = HistoryModel::where('model', 'MaterialReleaseApproval')->with('user');
+            // Combine and get unique entries
+            $this->histories = $userHistories->union($approvalHistories)->latest()->get();
         } else {
-            $this->histories = HistoryModel::where('user_id', $user->id)->with('user')->latest()->get();
+            // Users and developers only see their own histories
+            $this->histories = $userHistories->latest()->get();
         }
+
         \Log::info('Loaded ' . $this->histories->count() . ' history entries');
     }
 

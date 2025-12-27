@@ -6,11 +6,11 @@ System admins can now approve or decline material release requests directly from
 ## Features
 
 ### 1. **Approve/Decline Buttons in Chat**
-- When a regular user requests material release, a chat message is sent to all system admins
-- System admins see **Approve & Release** and **Decline** buttons directly in the chat message
+- When a regular user requests material release, private chat messages are sent to all system admins
+- System admins and developers see **Approve & Release** and **Decline** buttons directly in their private chat messages
 - Buttons only appear for:
-  - System admins and developers (not for the requester)
-  - Messages that have approval requests attached
+  - System admins and developers
+  - Messages containing approval requests
   - Requests with "pending" status
 
 ### 2. **Approval Workflow**

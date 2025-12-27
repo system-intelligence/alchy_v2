@@ -18,6 +18,8 @@ class MaterialReleaseApproval extends Model
         'reviewed_at',
         'review_notes',
         'chat_id',
+        'client',
+        'project',
     ];
 
     protected $casts = [

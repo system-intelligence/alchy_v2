@@ -8,6 +8,7 @@ use App\Models\Expense;
 use App\Models\History;
 use App\Models\Inventory;
 use App\Models\MaterialReleaseApproval;
+use App\Models\Project;
 use App\Models\User;
 use App\Models\Chat;
 use App\Notifications\MaterialReleaseApprovalRequest;
@@ -51,8 +52,10 @@ class Masterlist extends Component
     public bool $showDuplicateModal = false;
     public string $duplicateMessage = '';
     public Collection $clients;
+    public $projects = [];
     public Collection $inventoryOptions;
     public ?int $client_id = null;
+    public ?int $project_id = null;
     public array $releaseItems = [];
     public ?int $selectedInventoryId = null;
 
@@ -71,6 +74,7 @@ class Masterlist extends Component
     {
         $this->loadInventories();
         $this->clients = Client::with('expenses')->get();
+        $this->projects = [];
         $this->inventoryOptions = Inventory::orderBy('brand')->orderBy('description')->get();
     }
 
@@ -154,6 +158,23 @@ class Masterlist extends Component
         $this->showReleaseModal = true;
     }
 
+    public function updatedClientId()
+    {
+        $this->project_id = null;
+        if ($this->client_id) {
+            $projects = Project::where('client_id', $this->client_id)->get();
+            \Log::info('Projects found for client ' . $this->client_id . ': ' . count($projects));
+            $this->projects = $projects->map(fn($p) => [
+                'id' => $p->id,
+                'name' => $p->name,
+                'reference_code' => $p->reference_code,
+            ])->toArray();
+            \Log::info('Projects array: ', $this->projects);
+        } else {
+            $this->projects = [];
+        }
+    }
+
     public function addReleaseItem()
     {
         $this->validate([
@@ -218,6 +239,7 @@ class Masterlist extends Component
     public function resetReleaseForm()
     {
         $this->client_id = null;
+        $this->project_id = null;
         $this->releaseItems = [];
         $this->selectedInventoryId = null;
     }
@@ -271,30 +293,45 @@ class Masterlist extends Component
             // Create approval requests for each item
             foreach ($this->releaseItems as $item) {
                 $inventory = $inventories->get($item['inventory_id']);
-                
-                // Create chat message
-                try {
-                    $chat = Chat::create([
-                        'user_id' => auth()->id(),
-                        'recipient_id' => $systemAdmins->first()->id,
-                        'message' => "📋 Material Release Request from Masterlist\n\nClient: {$client->name}\nItem: {$inventory->brand} - {$inventory->description}\nQuantity: {$item['quantity_used']}\nCost per unit: {$item['cost_per_unit']}",
-                    ]);
-                } catch (\Exception $e) {
-                    \Log::error('Failed to create chat for masterlist approval: ' . $e->getMessage());
-                    $chat = null;
-                }
 
-                // Create approval request
+                // Create approval request first
+                $projectName = $this->project_id ? Project::find($this->project_id)?->name : null;
                 $approval = MaterialReleaseApproval::create([
                     'requested_by' => auth()->id(),
                     'inventory_id' => $inventory->id,
                     'quantity_requested' => $item['quantity_used'],
                     'reason' => "Material release for client: {$client->name}",
                     'status' => 'pending',
-                    'chat_id' => $chat ? $chat->id : null,
+                    'chat_id' => null, // Will be set after creating chat
+                    'client' => $client->name,
+                    'project' => $projectName,
                 ]);
 
                 \Log::info('Masterlist approval request created with ID: ' . $approval->id);
+
+                // Create chat messages to ALL system admins (private messages)
+                $chatIds = [];
+                foreach ($systemAdmins as $admin) {
+                    try {
+                        $projectInfo = $this->project_id ? "\nProject: " . Project::find($this->project_id)?->name : '';
+                        $chat = Chat::create([
+                            'user_id' => auth()->id(),
+                            'recipient_id' => $admin->id,
+                            'message' => "📋 Material Release Request from Masterlist\n\nClient: {$client->name}{$projectInfo}\nItem: {$inventory->brand} - {$inventory->description}\nQuantity: {$item['quantity_used']}\nCost per unit: {$item['cost_per_unit']}\n\nApproval ID: {$approval->id}",
+                        ]);
+                        $chatIds[] = $chat->id;
+
+                        // Broadcast the chat message
+                        event(new \App\Events\MessageSent($chat));
+                    } catch (\Exception $e) {
+                        \Log::error('Failed to create chat for admin ' . $admin->id . ': ' . $e->getMessage());
+                    }
+                }
+
+                // Update approval with first chat ID (for reference)
+                if (!empty($chatIds)) {
+                    $approval->update(['chat_id' => $chatIds[0]]);
+                }
 
                 // Create history entry for the request
                 \App\Models\History::create([
@@ -304,7 +341,8 @@ class Masterlist extends Component
                     'model_id' => $approval->id,
                     'changes' => json_encode([
                         'status' => 'pending',
-                        'client' => $client->name,
+                        'client' => $approval->client,
+                        'project' => $approval->project,
                         'material' => $inventory->material_name,
                         'quantity' => $item['quantity_used'],
                         'cost_per_unit' => $item['cost_per_unit'],
@@ -375,6 +413,7 @@ class Masterlist extends Component
         
         $this->validate([
             'client_id' => 'required|exists:clients,id',
+            'project_id' => 'required|exists:projects,id',
             'releaseItems' => 'required|array|min:1',
             'releaseItems.*.inventory_id' => 'required|exists:inventories,id',
             'releaseItems.*.quantity_used' => 'required|integer|min:1',
@@ -393,8 +432,8 @@ class Masterlist extends Component
             return;
         }
         
-        // System Admin/Developer: Direct release
-        if (!$user->isSystemAdmin() && !$user->isDeveloper()) {
+        // System Admin only: Direct release
+        if (!$user->isSystemAdmin()) {
             abort(403, 'Access denied. Insufficient privileges.');
         }
 
@@ -424,6 +463,7 @@ class Masterlist extends Component
                 // Create expense
                 $expense = Expense::create([
                     'client_id' => $this->client_id,
+                    'project_id' => $this->project_id,
                     'inventory_id' => $item['inventory_id'],
                     'quantity_used' => $item['quantity_used'],
                     'cost_per_unit' => $item['cost_per_unit'],

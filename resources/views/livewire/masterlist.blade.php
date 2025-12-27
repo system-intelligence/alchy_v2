@@ -157,13 +157,26 @@
                     <form wire:submit.prevent="saveRelease" class="space-y-6">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Client</label>
-                            <select wire:model="client_id" class="w-full shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none focus:shadow-outline">
+                            <select wire:model.live="client_id" class="w-full shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none focus:shadow-outline">
                                 <option value="">Select client...</option>
                                 @foreach($clients as $client)
                                     <option value="{{ $client->id }}">{{ $client->name }} — {{ $client->branch }}</option>
                                 @endforeach
                             </select>
                             @error('client_id') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Project</label>
+                            <select wire:model="project_id" class="w-full shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none focus:shadow-outline" @if(empty($projects)) disabled @endif>
+                                <option value="">Select project...</option>
+                                @forelse($projects as $project)
+                                    <option value="{{ $project['id'] }}">{{ $project['name'] }} — {{ $project['reference_code'] }}</option>
+                                @empty
+                                    <option disabled>No projects available for this client</option>
+                                @endforelse
+                            </select>
+                            @error('project_id') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                         </div>
 
                         <!-- Add Material Section -->
