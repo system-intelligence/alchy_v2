@@ -45,6 +45,8 @@ class User extends Authenticatable implements HasMedia
         'last_login_at',
         'last_logout_at',
         'last_login_ip',
+        'unread_private_counts',
+        'unread_group_count',
     ];
 
     /**
@@ -70,6 +72,8 @@ class User extends Authenticatable implements HasMedia
             'last_seen' => 'datetime',
             'last_login_at' => 'datetime',
             'last_logout_at' => 'datetime',
+            'unread_private_counts' => 'array',
+            'unread_group_count' => 'integer',
         ];
     }
 

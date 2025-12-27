@@ -58,6 +58,7 @@ Route::get('/tools', function () {
     return view('tools');
 })->middleware(['auth'])->name('tools');
 
+
 Route::get('/developer/user-management', function () {
     return view('developer.user-management');
 })->middleware(['auth'])->name('developer.user-management');

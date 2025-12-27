@@ -13,7 +13,6 @@ use App\Models\Project;
 use App\Models\MaterialReleaseApproval;
 use App\Models\User;
 use App\Models\Chat;
-use App\Notifications\MaterialReleaseApprovalRequest;
 use App\Events\ApprovalRequestCreated;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -1104,14 +1103,7 @@ class Expenses extends Component
                          \Log::error('Failed to broadcast event: ' . $e->getMessage());
                      }
 
-                     // Notify all system admins
-                     foreach ($systemAdmins as $admin) {
-                         try {
-                             $admin->notify(new MaterialReleaseApprovalRequest($approval));
-                         } catch (\Exception $e) {
-                             \Log::error('Failed to notify admin ' . $admin->id . ': ' . $e->getMessage());
-                         }
-                     }
+                     // Notification removed - using message boxes instead
                  }
 
                 DB::commit();

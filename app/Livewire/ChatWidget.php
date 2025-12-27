@@ -11,7 +11,7 @@ use App\Models\History;
 use App\Notifications\NewMessagePush;
 use App\Events\ApprovalActionTaken;
 use App\Events\HistoryEntryCreated;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Log;                                                                            
 use Livewire\Component;
 
 class ChatWidget extends Component
@@ -28,6 +28,7 @@ class ChatWidget extends Component
     public $unreadCounts = [];
     public $groupUnreadCount = 0;
     private $lastMessageCheck = null;
+    private $processedMessageIds = [];
 
     protected $listeners = [
         'messageReceived' => 'loadMessages',
@@ -44,12 +45,27 @@ class ChatWidget extends Component
 
     public function loadUnreadCounts()
     {
-        // Initialize unread counters for currently available users
+        $user = auth()->user();
+
+        // Load persisted unread counts from database
+        $this->unreadCounts = $user->unread_private_counts ?? [];
+        $this->groupUnreadCount = $user->unread_group_count ?? 0;
+
+        // Ensure all current users have entries in the array
         foreach ($this->users as $u) {
             if (!isset($this->unreadCounts[$u->id])) {
                 $this->unreadCounts[$u->id] = 0;
             }
         }
+    }
+
+    public function saveUnreadCounts()
+    {
+        $user = auth()->user();
+        $user->update([
+            'unread_private_counts' => $this->unreadCounts,
+            'unread_group_count' => $this->groupUnreadCount,
+        ]);
     }
 
     public function loadUsers()
@@ -76,6 +92,7 @@ class ChatWidget extends Component
         // Reset unread count for this conversation when opening it
         if ($this->selectedUser) {
             $this->unreadCounts[$this->selectedUser->id] = 0;
+            $this->saveUnreadCounts();
         }
 
         $this->lastMessageCheck = now();
@@ -88,6 +105,7 @@ class ChatWidget extends Component
         $this->selectedUser = null;
         $this->isGroupChat = true;
         $this->groupUnreadCount = 0;
+        $this->saveUnreadCounts();
         $this->lastMessageCheck = now();
         $this->loadMessages();
         $this->dispatch('groupChatSelected');
@@ -233,6 +251,21 @@ class ChatWidget extends Component
     public function handleIncoming($payload)
     {
         // Payload from Echo broadcastWith()
+        $messageId = $payload['message_id'] ?? null;
+
+        // Prevent processing the same message multiple times
+        if ($messageId && in_array($messageId, $this->processedMessageIds)) {
+            return;
+        }
+
+        if ($messageId) {
+            $this->processedMessageIds[] = $messageId;
+            // Keep only the last 100 processed message IDs to prevent memory issues
+            if (count($this->processedMessageIds) > 100) {
+                array_shift($this->processedMessageIds);
+            }
+        }
+
         $senderId = $payload['user_id'] ?? null;
         $recipientId = $payload['recipient_id'] ?? null;
         $groupId = $payload['group_id'] ?? null;
@@ -247,6 +280,7 @@ class ChatWidget extends Component
             } else {
                 // Increment unread count for group
                 $this->groupUnreadCount = ($this->groupUnreadCount ?? 0) + 1;
+                $this->saveUnreadCounts();
                 // Force UI update
                 $this->dispatch('$refresh');
 
@@ -293,7 +327,8 @@ class ChatWidget extends Component
                     $this->unreadCounts[$senderId] = 0;
                 }
                 $this->unreadCounts[$senderId]++;
-                
+                $this->saveUnreadCounts();
+
                 // Force UI update
                 $this->dispatch('$refresh');
             }

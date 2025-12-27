@@ -27,17 +27,17 @@ class History extends Component
         \Log::info('Loading histories for user: ' . auth()->id());
         $user = auth()->user();
 
-        // Get user's own histories
-        $userHistories = HistoryModel::where('user_id', $user->id)->with('user');
-
-        // Only system admins can see all approval request histories
         if ($user->role === 'system_admin') {
+            // System admins see ALL histories across the system
+            $this->histories = HistoryModel::with('user')->latest()->get();
+        } elseif ($user->role === 'user') {
+            // Users see their own histories + all approval request histories
+            $userHistories = HistoryModel::where('user_id', $user->id)->with('user');
             $approvalHistories = HistoryModel::where('model', 'MaterialReleaseApproval')->with('user');
-            // Combine and get unique entries
             $this->histories = $userHistories->union($approvalHistories)->latest()->get();
         } else {
-            // Users and developers only see their own histories
-            $this->histories = $userHistories->latest()->get();
+            // Developers only see their own histories
+            $this->histories = HistoryModel::where('user_id', $user->id)->with('user')->latest()->get();
         }
 
         \Log::info('Loaded ' . $this->histories->count() . ' history entries');

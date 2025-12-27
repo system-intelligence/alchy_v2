@@ -11,7 +11,6 @@ use App\Models\MaterialReleaseApproval;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Chat;
-use App\Notifications\MaterialReleaseApprovalRequest;
 use App\Events\ApprovalRequestCreated;
 use Illuminate\Database\Eloquent\Collection;
 use Livewire\Component;
@@ -373,14 +372,7 @@ class Masterlist extends Component
                     \Log::error('Failed to broadcast masterlist approval event: ' . $e->getMessage());
                 }
 
-                // Notify all system admins
-                foreach ($systemAdmins as $admin) {
-                    try {
-                        $admin->notify(new MaterialReleaseApprovalRequest($approval));
-                    } catch (\Exception $e) {
-                        \Log::error('Failed to notify admin for masterlist approval: ' . $e->getMessage());
-                    }
-                }
+                // Notification removed - using message boxes instead
             }
 
             \DB::commit();

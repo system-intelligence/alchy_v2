@@ -6,6 +6,7 @@ use Livewire\Component;
 use App\Models\MaterialReleaseApproval;
 use App\Models\User;
 use App\Models\Chat;
+use App\Models\History;
 use Illuminate\Support\Facades\DB;
 
 class ApprovalManagement extends Component
@@ -100,25 +101,31 @@ class ApprovalManagement extends Component
                 ->first();
 
             if ($existingHistory) {
-                // Update existing history with completion details
+                // Preserve existing changes and add completion details
+                $existingChanges = json_decode($existingHistory->changes, true) ?? [];
+                $completionData = [
+                    'status' => 'approved',
+                    'project' => $approval->project ?? 'N/A',
+                    'client' => $approval->client ?? 'N/A',
+                    'material' => $approval->inventory->material_name,
+                    'quantity' => $approval->quantity_requested,
+                    'reviewer' => auth()->user()->name,
+                    'completed_at' => now()->toDateTimeString(),
+                ];
+
+                // Merge existing data with completion data
+                $updatedChanges = array_merge($existingChanges, $completionData);
+
                 $existingHistory->update([
-                    'action' => 'Approval Request Completed',
-                    'changes' => json_encode([
-                        'status' => 'approved',
-                        'project' => $approval->project ?? 'N/A',
-                        'client' => $approval->client ?? 'N/A',
-                        'material' => $approval->inventory->material_name,
-                        'quantity' => $approval->quantity_requested,
-                        'reviewer' => auth()->user()->name,
-                        'completed_at' => now()->toDateTimeString(),
-                    ]),
+                    'action' => 'Approval Request Approved',
+                    'changes' => json_encode($updatedChanges),
                 ]);
                 $approvalHistory = $existingHistory;
             } else {
                 // Create new if not found
                 $approvalHistory = History::create([
                     'user_id' => $approval->requested_by,
-                    'action' => 'Approval Request Completed',
+                    'action' => 'Approval Request Approved',
                     'model' => 'MaterialReleaseApproval',
                     'model_id' => $approval->id,
                     'changes' => json_encode([
@@ -138,6 +145,8 @@ class ApprovalManagement extends Component
 
             // Broadcast history event
             event(new HistoryEntryCreated($approvalHistory));
+
+            // Notification removed - using message boxes instead
 
             // Send message to requester via chat
             if ($approval->chat) {
@@ -183,26 +192,32 @@ class ApprovalManagement extends Component
                 ->first();
 
             if ($existingHistory) {
-                // Update existing history with completion details
+                // Preserve existing changes and add completion details
+                $existingChanges = json_decode($existingHistory->changes, true) ?? [];
+                $completionData = [
+                    'status' => 'declined',
+                    'project' => $approval->project ?? 'N/A',
+                    'client' => $approval->client ?? 'N/A',
+                    'material' => $approval->inventory->material_name,
+                    'quantity' => $approval->quantity_requested,
+                    'reviewer' => auth()->user()->name,
+                    'reason' => $notes ?: $this->reviewNotes,
+                    'completed_at' => now()->toDateTimeString(),
+                ];
+
+                // Merge existing data with completion data
+                $updatedChanges = array_merge($existingChanges, $completionData);
+
                 $existingHistory->update([
-                    'action' => 'Approval Request Completed',
-                    'changes' => json_encode([
-                        'status' => 'declined',
-                        'project' => $approval->project ?? 'N/A',
-                        'client' => $approval->client ?? 'N/A',
-                        'material' => $approval->inventory->material_name,
-                        'quantity' => $approval->quantity_requested,
-                        'reviewer' => auth()->user()->name,
-                        'reason' => $notes ?: $this->reviewNotes,
-                        'completed_at' => now()->toDateTimeString(),
-                    ]),
+                    'action' => 'Approval Request Declined',
+                    'changes' => json_encode($updatedChanges),
                 ]);
                 $approvalHistory = $existingHistory;
             } else {
                 // Create new if not found
                 $approvalHistory = History::create([
                     'user_id' => $approval->requested_by,
-                    'action' => 'Approval Request Completed',
+                    'action' => 'Approval Request Declined',
                     'model' => 'MaterialReleaseApproval',
                     'model_id' => $approval->id,
                     'changes' => json_encode([
@@ -223,6 +238,8 @@ class ApprovalManagement extends Component
 
             // Broadcast history event
             event(new HistoryEntryCreated($approvalHistory));
+
+            // Notification removed - using message boxes instead
 
             // Send message to requester via chat
             if ($approval->chat) {
