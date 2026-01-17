@@ -1,5 +1,6 @@
 <div class="fixed bottom-4 right-4 z-50"
-     x-data="{
+      wire:poll.5s="checkForUpdates"
+      x-data="{
         toasts: [],
         maxToasts: 5,
         nextId: 1,
@@ -71,6 +72,63 @@
                 });
             }
         },
+        async preloadSound() {
+            try {
+                console.log('[Sound] Preloading notification sound...');
+                const response = await fetch('/sounds/ringtone.mp3');
+                const blob = await response.blob();
+                const dataUrl = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.readAsDataURL(blob);
+                });
+                localStorage.setItem('chatNotificationSound', dataUrl);
+                console.log('[Sound] ✅ Sound preloaded and cached');
+            } catch (e) {
+                console.log('[Sound] ❌ Failed to preload sound:', e);
+            }
+        },
+        playSound() {
+            console.log('[Sound] Attempting to play notification sound...');
+            try {
+                // Try to resume audio context if suspended (for autoplay policy)
+                if (window.AudioContext || window.webkitAudioContext) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    const audioContext = new AudioContext();
+                    if (audioContext.state === 'suspended') {
+                        audioContext.resume();
+                    }
+                }
+
+                // Use cached sound if available, otherwise fetch
+                const cachedSound = localStorage.getItem('chatNotificationSound');
+                const audioSrc = cachedSound || '/sounds/ringtone.mp3';
+
+                const audio = new Audio(audioSrc);
+                audio.volume = 0.5; // Set volume to 50%
+
+                // Preload sound if not cached
+                if (!cachedSound) {
+                    audio.addEventListener('canplaythrough', () => {
+                        this.preloadSound();
+                    }, { once: true });
+                }
+
+                audio.play().then(() => {
+                    console.log('[Sound] ✅ Notification sound played successfully');
+                }).catch(e => {
+                    console.log('[Sound] ❌ Sound notification failed:', e);
+                    // Fallback: try to play on user interaction
+                    document.addEventListener('click', () => {
+                        const fallbackAudio = new Audio(audioSrc);
+                        fallbackAudio.volume = 0.5;
+                        fallbackAudio.play().catch(e2 => console.log('[Sound] ❌ Fallback also failed:', e2));
+                    }, { once: true });
+                });
+            } catch (e) {
+                console.log('[Sound] ❌ Sound notification error:', e);
+            }
+        },
         setupEcho(userId) {
             if (this.subscribed || !window.Echo || !userId) {
                 if (!window.Echo) {
@@ -88,7 +146,10 @@
                     // Data comes directly from broadcastWith()
                     if (data && data.user_id) {
                         console.info('[Chat] 📬 Processing incoming message from user:', data.user_id);
-                        $wire.call('handleIncoming', data);
+
+                        // Update unread counts and refresh UI
+                        $wire.call('loadUnreadCounts');
+                        $wire.dispatch('$refresh');
                     } else {
                         console.warn('[Chat] ⚠️ Invalid message data:', data);
                     }
@@ -256,7 +317,14 @@
             }
         }
      }"
-     x-init="setupEcho({{ auth()->id() }})"
+     x-init="
+       setupEcho({{ auth()->id() }});
+       preloadSound();
+       $wire.on('playSoundNotification', () => {
+         console.log('[Livewire] playSoundNotification event received');
+         playSound();
+       });
+     "
      x-effect="
         if ($wire.selectedUser) { setupConversation($wire.selectedUser.id) }
         if ($wire.isGroupChat) { setupGroupChat() }
@@ -271,7 +339,6 @@
      "
      @new-message-notification.window="console.log('[Event] new-message-notification received:', $event.detail); let data = $event.detail[0] || $event.detail; showToast(data.message, data.type, data.duration)"
      @message-sent-notification.window="console.log('[Event] message-sent-notification received:', $event.detail); let data = $event.detail[0] || $event.detail; showToast(data.message, data.type, data.duration)"
-     @browserNotification.window="notifyBrowser($event.detail)"
      @userSelected.window="setupConversation($event.detail)">
     @if($isOpen)
         <!-- Backdrop Blur Overlay -->

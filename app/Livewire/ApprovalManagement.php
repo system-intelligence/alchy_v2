@@ -7,6 +7,12 @@ use App\Models\MaterialReleaseApproval;
 use App\Models\User;
 use App\Models\Chat;
 use App\Models\History;
+use App\Models\Expense;
+use App\Models\Inventory;
+use App\Models\Project;
+use App\Enums\InventoryStatus;
+use App\Events\HistoryEntryCreated;
+use App\Events\ApprovalActionTaken;
 use Illuminate\Support\Facades\DB;
 
 class ApprovalManagement extends Component
@@ -143,6 +149,9 @@ class ApprovalManagement extends Component
                 ]);
             }
 
+            // Process the material release
+            $this->processApprovedRelease($approval, $notes ?: $this->reviewNotes);
+
             // Broadcast history event
             event(new HistoryEntryCreated($approvalHistory));
 
@@ -267,6 +276,93 @@ class ApprovalManagement extends Component
     {
         // Redirect to chat with this conversation
         return redirect()->route('dashboard')->with(['openChatId' => $chatId]);
+    }
+
+    /**
+     * Process approved material release for regular users
+     */
+    protected function processApprovedRelease($approval, $notes = null): void
+    {
+        try {
+            // Get the cost per unit from the approval request data
+            // Since we don't have it stored, we'll use a default or try to get it from the request
+            $costPerUnit = 0.00; // Default, could be enhanced to store this in approval
+
+            // Create expense record
+            $totalCost = round($approval->quantity_requested * $costPerUnit, 2);
+            $expense = Expense::create([
+                'client_id' => null, // We don't have client_id in approval, could be enhanced
+                'project_id' => null, // We don't have project_id in approval, could be enhanced
+                'inventory_id' => $approval->inventory_id,
+                'quantity_used' => $approval->quantity_requested,
+                'cost_per_unit' => $costPerUnit,
+                'total_cost' => $totalCost,
+                'released_at' => now(),
+            ]);
+
+            // Update inventory
+            $inventory = $approval->inventory;
+            $previousQuantity = $inventory->quantity;
+            $newQuantity = $inventory->quantity - $approval->quantity_requested;
+            $newStatus = $newQuantity <= 0
+                ? InventoryStatus::OUT_OF_STOCK
+                : ($newQuantity <= $inventory->min_stock_level
+                    ? InventoryStatus::CRITICAL
+                    : InventoryStatus::NORMAL);
+
+            $inventory->update([
+                'quantity' => max(0, $newQuantity),
+                'status' => $newStatus->value,
+            ]);
+
+            // Record outbound stock movement
+            $notesText = "Approved material release - {$approval->reason}";
+            $inventory->recordStockMovement('outbound', $approval->quantity_requested, $approval->requested_by, [
+                'reference' => 'expense_' . $expense->id,
+                'notes' => $notesText,
+            ], $previousQuantity);
+
+            // Create history entry for the completed material release
+            $changes = [
+                'status' => 'approved',
+                'material' => $inventory->material_name,
+                'material_details' => $inventory->brand . ' ' . $inventory->description,
+                'quantity' => $approval->quantity_requested,
+                'cost_per_unit' => $costPerUnit,
+                'total_cost' => $totalCost,
+                'reason' => $approval->reason,
+                'approved_by' => auth()->user()->name,
+                'completed_at' => now()->toDateTimeString(),
+                'auto_approved' => false, // Regular approval, not auto-approved
+                'approved_by_self' => false,
+            ];
+
+            $history = History::create([
+                'user_id' => $approval->requested_by,
+                'action' => 'Material Release Completed',
+                'model' => 'MaterialReleaseApproval',
+                'model_id' => $approval->id,
+                'changes' => json_encode($changes),
+                'old_values' => json_encode([
+                    'status' => 'pending'
+                ]),
+            ]);
+
+            // Update approval with expense_id
+            $approval->update(['expense_id' => $expense->id]);
+
+            // Broadcast history event
+            event(new HistoryEntryCreated($history));
+
+            // Broadcast real-time approval event
+            event(new ApprovalActionTaken($approval, 'approved'));
+
+            \Log::info('Regular user material release processed for approval ID: ' . $approval->id);
+
+        } catch (\Exception $e) {
+            \Log::error('Failed to process approved release: ' . $e->getMessage());
+            throw $e; // Re-throw to trigger rollback
+        }
     }
 
     public function render()

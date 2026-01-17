@@ -9,9 +9,12 @@ use App\Models\History;
 use App\Models\Inventory;
 use App\Models\MaterialReleaseApproval;
 use App\Models\Project;
+use App\Models\StockMovement;
 use App\Models\User;
 use App\Models\Chat;
-use App\Events\ApprovalRequestCreated;
+    use App\Events\ApprovalRequestCreated;
+    use App\Events\ApprovalActionTaken;
+use App\Events\HistoryEntryCreated;
 use Illuminate\Database\Eloquent\Collection;
 use Livewire\Component;
 use Livewire\WithFileUploads;
@@ -34,13 +37,14 @@ class Masterlist extends Component
     public ?string $brand = '';
     public ?string $description = '';
     public ?string $category = '';
-    public ?int $quantity = 0;
-    public ?int $min_stock_level = 5;
+    public ?string $quantity = '0';
+    public ?string $min_stock_level = '5';
     public $image;
 
     // Filters
     public string $search = '';
     public string $statusFilter = '';
+    public string $categoryFilter = '';
 
     // Bulk operations
     public bool $selectAll = false;
@@ -52,19 +56,34 @@ class Masterlist extends Component
     public string $duplicateMessage = '';
     public Collection $clients;
     public $projects = [];
-    public Collection $inventoryOptions;
     public ?int $client_id = null;
     public ?int $project_id = null;
     public array $releaseItems = [];
-    public ?int $selectedInventoryId = null;
 
     // Delete Inventory modal properties
     public bool $showDeleteModal = false;
     public ?int $deleteInventoryId = null;
     public string $deletePassword = '';
 
+    // Bulk Delete modal properties
+    public bool $showBulkDeleteModal = false;
+    public string $bulkDeletePassword = '';
+
     // Edit password
     public string $editPassword = '';
+
+    // Modal tabs
+    public string $activeTab = 'edit'; // 'edit', 'inbound', 'movements'
+
+    // Inbound stock form
+    public ?string $inboundQuantity = '0';
+    public ?string $supplier = '';
+    public ?string $dateReceived = '';
+    public ?string $inboundNotes = '';
+
+    // Stock movements filters
+    public string $movementTypeFilter = '';
+    public string $movementDateFilter = '';
 
     /**
      * Initialize component data.
@@ -74,7 +93,6 @@ class Masterlist extends Component
         $this->loadInventories();
         $this->clients = Client::with('expenses')->get();
         $this->projects = [];
-        $this->inventoryOptions = Inventory::orderBy('brand')->orderBy('description')->get();
     }
 
     /**
@@ -97,6 +115,11 @@ class Masterlist extends Component
         // Apply status filter
         if (!empty($this->statusFilter)) {
             $query->where('status', $this->statusFilter);
+        }
+
+        // Apply category filter
+        if (!empty($this->categoryFilter)) {
+            $query->where('category', $this->categoryFilter);
         }
 
         $this->inventories = $query->orderBy('created_at', 'desc')->get();
@@ -124,8 +147,8 @@ class Masterlist extends Component
             $this->brand = $inventory->brand;
             $this->description = $inventory->description;
             $this->category = $inventory->category;
-            $this->quantity = $inventory->quantity;
-            $this->min_stock_level = $inventory->min_stock_level;
+            $this->quantity = (string) $inventory->quantity;
+            $this->min_stock_level = (string) $inventory->min_stock_level;
         }
 
         $this->showModal = true;
@@ -137,9 +160,11 @@ class Masterlist extends Component
         $this->showReleaseModal = false;
         $this->showDuplicateModal = false;
         $this->showDeleteModal = false;
+        $this->showBulkDeleteModal = false;
         $this->resetForm();
         $this->resetReleaseForm();
         $this->resetDeleteForm();
+        $this->resetBulkDeleteForm();
     }
 
     public function closeDuplicateModal()
@@ -157,6 +182,41 @@ class Masterlist extends Component
         $this->showReleaseModal = true;
     }
 
+    public function addSelectedToRelease()
+    {
+        if (!auth()->check() || (!auth()->user()->isSystemAdmin() && !auth()->user()->isUser())) {
+            abort(403);
+        }
+
+        if (empty($this->selectedItems)) {
+            session()->flash('message', 'No items selected.');
+            return;
+        }
+
+        $this->resetReleaseForm();
+        $this->showReleaseModal = true;
+
+        // Get selected inventories
+        $selectedInventories = Inventory::whereIn('id', $this->selectedItems)->get();
+
+        // Add each selected item to release items with default values
+        foreach ($selectedInventories as $inventory) {
+            // Check if already added (though unlikely since we're starting fresh)
+            if (!collect($this->releaseItems)->pluck('inventory_id')->contains($inventory->id)) {
+                $this->releaseItems[] = [
+                    'inventory_id' => $inventory->id,
+                    'quantity_used' => 1, // Default quantity
+                    'cost_per_unit' => 0.00, // Default cost, user can edit
+                    'inventory' => $inventory,
+                ];
+            }
+        }
+
+        // Clear selection after adding
+        $this->selectedItems = [];
+        $this->selectAll = false;
+    }
+
     public function updatedClientId()
     {
         $this->project_id = null;
@@ -169,39 +229,17 @@ class Masterlist extends Component
                 'reference_code' => $p->reference_code,
             ])->toArray();
             \Log::info('Projects array: ', $this->projects);
+
+            // Auto-select first project if available
+            if (count($this->projects) === 1) {
+                $this->project_id = $this->projects[0]['id'];
+            }
         } else {
             $this->projects = [];
         }
     }
 
-    public function addReleaseItem()
-    {
-        $this->validate([
-            'selectedInventoryId' => 'required|exists:inventories,id',
-        ]);
-
-        $inventory = Inventory::find($this->selectedInventoryId);
-        if (!$inventory) {
-            session()->flash('message', 'Selected inventory not found.');
-            return;
-        }
-
-        // Check if already added
-        if (collect($this->releaseItems)->pluck('inventory_id')->contains($this->selectedInventoryId)) {
-            $this->showDuplicateModal = true;
-            $this->duplicateMessage = 'Oops, you already selected the same material. You may just edit the details for an update.';
-            return;
-        }
-
-        $this->releaseItems[] = [
-            'inventory_id' => $this->selectedInventoryId,
-            'quantity_used' => 1,
-            'cost_per_unit' => 0,
-            'inventory' => $inventory,
-        ];
-
-        $this->selectedInventoryId = null;
-    }
+    // Removed selectMaterial method - no longer needed with dropdown selection
 
     public function removeReleaseItem($index)
     {
@@ -218,6 +256,14 @@ class Masterlist extends Component
             $field = $parts[1];
             if (isset($this->releaseItems[$index])) {
                 $this->releaseItems[$index][$field] = $value;
+
+                // Ensure inventory object is present
+                if (!isset($this->releaseItems[$index]['inventory']) && isset($this->releaseItems[$index]['inventory_id'])) {
+                    $inventory = Inventory::find($this->releaseItems[$index]['inventory_id']);
+                    if ($inventory) {
+                        $this->releaseItems[$index]['inventory'] = $inventory;
+                    }
+                }
             }
         }
     }
@@ -229,10 +275,13 @@ class Masterlist extends Component
         $this->brand = '';
         $this->description = '';
         $this->category = '';
-        $this->quantity = 0;
-        $this->min_stock_level = 5;
+        $this->quantity = '0';
+        $this->min_stock_level = '5';
         $this->image = null;
         $this->editPassword = '';
+        $this->activeTab = 'edit';
+        $this->resetInboundForm();
+        $this->resetMovementFilters();
     }
 
     public function resetReleaseForm()
@@ -240,7 +289,6 @@ class Masterlist extends Component
         $this->client_id = null;
         $this->project_id = null;
         $this->releaseItems = [];
-        $this->selectedInventoryId = null;
     }
 
     protected function resetDeleteForm(): void
@@ -249,17 +297,39 @@ class Masterlist extends Component
         $this->deletePassword = '';
     }
 
+    protected function resetBulkDeleteForm(): void
+    {
+        $this->bulkDeletePassword = '';
+    }
+
+    protected function resetInboundForm(): void
+    {
+        $this->inboundQuantity = '';
+        $this->supplier = '';
+        $this->dateReceived = '';
+        $this->inboundNotes = '';
+    }
+
+    protected function resetMovementFilters(): void
+    {
+        $this->movementTypeFilter = '';
+        $this->movementDateFilter = '';
+    }
+
     /**
-     * Submit material release approval request for regular users
+     * Submit material release approval request for all users (uniform process)
      */
     protected function submitMasterlistApprovalRequest(Client $client): void
     {
         \DB::beginTransaction();
         try {
-            // Get all system admins
-            $systemAdmins = User::where('role', 'system_admin')->get();
-            
-            if ($systemAdmins->isEmpty()) {
+            // Get all system admins (excluding the requester if they are an admin)
+            $systemAdmins = User::where('role', 'system_admin')
+                ->where('id', '!=', auth()->id())
+                ->get();
+
+            // If requester is not a system admin, ensure there are admins to approve
+            if (!auth()->user()->isSystemAdmin() && $systemAdmins->isEmpty()) {
                 \Log::warning('No system administrators found for masterlist approval');
                 session()->flash('error', 'No system administrators available to approve your request.');
                 $this->closeModal();
@@ -267,7 +337,10 @@ class Masterlist extends Component
                 return;
             }
 
-            \Log::info('Masterlist approval request from user: ' . auth()->user()->name);
+            // If requester is a system admin, they can auto-approve their own request
+            $autoApprove = auth()->user()->isSystemAdmin();
+
+            \Log::info('Masterlist approval request from user: ' . auth()->user()->name . ($autoApprove ? ' (auto-approve)' : ''));
 
             // Validate inventory availability
             $inventories = Inventory::whereIn('id', collect($this->releaseItems)->pluck('inventory_id'))->get()->keyBy('id');
@@ -295,35 +368,54 @@ class Masterlist extends Component
 
                 // Create approval request first
                 $projectName = $this->project_id ? Project::find($this->project_id)?->name : null;
-                $approval = MaterialReleaseApproval::create([
+                $approvalData = [
                     'requested_by' => auth()->id(),
                     'inventory_id' => $inventory->id,
                     'quantity_requested' => $item['quantity_used'],
                     'reason' => "Material release for client: {$client->name}",
-                    'status' => 'pending',
+                    'status' => $autoApprove ? 'approved' : 'pending', // Auto-approve for system admins
                     'chat_id' => null, // Will be set after creating chat
                     'client' => $client->name,
                     'project' => $projectName,
-                ]);
+                ];
 
-                \Log::info('Masterlist approval request created with ID: ' . $approval->id);
+                if ($autoApprove) {
+                    $approvalData['reviewed_by'] = auth()->id();
+                    $approvalData['reviewed_at'] = now();
+                    $approvalData['review_notes'] = 'Auto-approved by system admin';
+                }
 
-                // Create chat messages to ALL system admins (private messages)
+                $approval = MaterialReleaseApproval::create($approvalData);
+
+                \Log::info('Masterlist approval request created with ID: ' . $approval->id . ' (status: ' . $approval->status . ')');
+
+                // Create chat messages to ALL system admins (private messages) - only if not auto-approved
                 $chatIds = [];
-                foreach ($systemAdmins as $admin) {
-                    try {
-                        $projectInfo = $this->project_id ? "\nProject: " . Project::find($this->project_id)?->name : '';
-                        $chat = Chat::create([
-                            'user_id' => auth()->id(),
-                            'recipient_id' => $admin->id,
-                            'message' => "📋 Material Release Request from Masterlist\n\nClient: {$client->name}{$projectInfo}\nItem: {$inventory->brand} - {$inventory->description}\nQuantity: {$item['quantity_used']}\nCost per unit: {$item['cost_per_unit']}\n\nApproval ID: {$approval->id}",
-                        ]);
-                        $chatIds[] = $chat->id;
+                if (!$autoApprove) {
+                    foreach ($systemAdmins as $admin) {
+                        try {
+                            $projectInfo = $this->project_id ? "\nProject: " . Project::find($this->project_id)?->name : '';
+                            $chat = Chat::create([
+                                'user_id' => auth()->id(),
+                                'recipient_id' => $admin->id,
+                                'message' => "📋 Material Release Request from Masterlist\n\nClient: {$client->name}{$projectInfo}\nItem: {$inventory->brand} - {$inventory->description}\nQuantity: {$item['quantity_used']}\nCost per unit: {$item['cost_per_unit']}\n\nApproval ID: {$approval->id}",
+                            ]);
+                            $chatIds[] = $chat->id;
 
-                        // Broadcast the chat message
-                        event(new \App\Events\MessageSent($chat));
-                    } catch (\Exception $e) {
-                        \Log::error('Failed to create chat for admin ' . $admin->id . ': ' . $e->getMessage());
+                            // Update unread count for recipient
+                            $currentCounts = $admin->unread_private_counts ?? [];
+                            $senderId = (string) auth()->id();
+                            $currentCounts[$senderId] = ($currentCounts[$senderId] ?? 0) + 1;
+
+                            $admin->update([
+                                'unread_private_counts' => $currentCounts,
+                            ]);
+
+                            // Broadcast the chat message
+                            event(new \App\Events\MessageSent($chat));
+                        } catch (\Exception $e) {
+                            \Log::error('Failed to create chat for admin ' . $admin->id . ': ' . $e->getMessage());
+                        }
                     }
                 }
 
@@ -332,56 +424,33 @@ class Masterlist extends Component
                     $approval->update(['chat_id' => $chatIds[0]]);
                 }
 
-                // Create history entry for the request
-                \App\Models\History::create([
-                    'user_id' => auth()->id(),
-                    'action' => 'Material Release Request Created',
-                    'model' => 'MaterialReleaseApproval',
-                    'model_id' => $approval->id,
-                    'changes' => json_encode([
-                        'status' => 'pending',
-                        'client' => $approval->client,
-                        'project' => $approval->project,
-                        'material' => $inventory->material_name,
-                        'quantity' => $item['quantity_used'],
-                        'cost_per_unit' => $item['cost_per_unit'],
-                        'reason' => "Material release for client: {$client->name}",
-                        'requested_at' => now()->toDateTimeString(),
-                    ]),
-                    'old_values' => null,
-                ]);
-
-                // Broadcast history creation event
-                try {
-                    $historyEntry = \App\Models\History::where('user_id', auth()->id())
-                        ->where('model', 'MaterialReleaseApproval')
-                        ->where('model_id', $approval->id)
-                        ->latest()
-                        ->first();
-                    if ($historyEntry) {
-                        event(new \App\Events\HistoryEntryCreated($historyEntry));
+                // If auto-approved, immediately process the release (includes history creation)
+                if ($autoApprove) {
+                    $this->processAutoApprovedRelease($approval, $item, $inventory, $client);
+                } else {
+                    // For regular users, only broadcast the approval request event
+                    // History will be created when approval is actually processed
+                    try {
+                        event(new ApprovalRequestCreated($approval));
+                    } catch (\Exception $e) {
+                        \Log::error('Failed to broadcast masterlist approval event: ' . $e->getMessage());
                     }
-                } catch (\Exception $e) {
-                    \Log::error('Failed to broadcast history event: ' . $e->getMessage());
-                }
-
-                // Broadcast real-time event
-                try {
-                    event(new ApprovalRequestCreated($approval));
-                } catch (\Exception $e) {
-                    \Log::error('Failed to broadcast masterlist approval event: ' . $e->getMessage());
                 }
 
                 // Notification removed - using message boxes instead
             }
 
             \DB::commit();
-            
+
             $this->closeModal();
             $this->resetReleaseForm();
-            
-            session()->flash('message', '✅ Material release request sent to System Admin for approval. Materials will NOT be released until approved.');
-            
+
+            $message = $autoApprove
+                ? '✅ Material release completed successfully! (Auto-approved as System Admin)'
+                : '✅ Material release request sent to System Admin for approval. Materials will NOT be released until approved.';
+
+            session()->flash('message', $message);
+
         } catch (\Exception $e) {
             \DB::rollBack();
             \Log::error('Masterlist approval request failed: ' . $e->getMessage());
@@ -391,8 +460,96 @@ class Masterlist extends Component
     }
 
     /**
+     * Process auto-approved release for system admins
+     */
+    protected function processAutoApprovedRelease($approval, $item, $inventory, $client): void
+    {
+        try {
+            // Create expense record
+            $totalCost = round($item['quantity_used'] * (float)$item['cost_per_unit'], 2);
+            $expense = Expense::create([
+                'client_id' => $this->client_id,
+                'project_id' => $this->project_id,
+                'inventory_id' => $inventory->id,
+                'quantity_used' => $item['quantity_used'],
+                'cost_per_unit' => $item['cost_per_unit'],
+                'total_cost' => $totalCost,
+                'released_at' => now(),
+            ]);
+
+            // Update inventory
+            $previousQuantity = $inventory->quantity;
+            $newQuantity = $inventory->quantity - $item['quantity_used'];
+            $newStatus = $newQuantity <= 0
+                ? InventoryStatus::OUT_OF_STOCK
+                : ($newQuantity <= $inventory->min_stock_level
+                    ? InventoryStatus::CRITICAL
+                    : InventoryStatus::NORMAL);
+
+            $inventory->update([
+                'quantity' => max(0, $newQuantity),
+                'status' => $newStatus->value,
+            ]);
+
+            // Record outbound stock movement
+            $project = Project::find($this->project_id);
+            $notes = "Released to client: {$client->name}";
+            if ($project) {
+                $notes .= " - Project: {$project->name} (Ref: {$project->reference_code})";
+            }
+
+            $inventory->recordStockMovement('outbound', $item['quantity_used'], auth()->id(), [
+                'cost_per_unit' => $item['cost_per_unit'],
+                'total_cost' => $totalCost,
+                'reference' => 'expense_' . $expense->id,
+                'notes' => $notes,
+            ], $previousQuantity);
+
+            // Create history entry for the completed material release
+            $changes = [
+                'status' => 'approved',
+                'project' => $approval->project ?? 'N/A',
+                'client' => $approval->client ?? 'N/A',
+                'material' => $inventory->material_name,
+                'material_details' => $inventory->brand . ' ' . $inventory->description,
+                'quantity' => $item['quantity_used'],
+                'cost_per_unit' => $item['cost_per_unit'],
+                'total_cost' => $totalCost,
+                'reason' => "Material release for client: {$client->name}",
+                'approved_by' => auth()->user()->name,
+                'completed_at' => now()->toDateTimeString(),
+                'auto_approved' => true, // Indicate this was auto-approved by system admin
+                'approved_by_self' => true, // System admin approved their own request
+            ];
+
+            $history = History::create([
+                'user_id' => auth()->id(),
+                'action' => 'Material Release Completed',
+                'model' => 'MaterialReleaseApproval',
+                'model_id' => $approval->id,
+                'changes' => json_encode($changes),
+                'old_values' => json_encode([
+                    'status' => 'pending'
+                ]),
+            ]);
+
+            // Broadcast history event
+            event(new HistoryEntryCreated($history));
+
+            // Broadcast real-time approval event
+            event(new ApprovalActionTaken($approval, 'approved'));
+
+            \Log::info('Auto-approved release processed for approval ID: ' . $approval->id);
+
+        } catch (\Exception $e) {
+            \Log::error('Failed to process auto-approved release: ' . $e->getMessage());
+            throw $e; // Re-throw to trigger rollback
+        }
+    }
+
+    /**
      * Process inventory release to client.
-     * Creates expenses and updates inventory quantities.
+     * All users (including system admins) now submit approval requests for uniformity.
      */
     public function saveRelease(): void
     {
@@ -402,129 +559,81 @@ class Masterlist extends Component
         }
 
         $user = auth()->user();
-        
-        $this->validate([
-            'client_id' => 'required|exists:clients,id',
-            'project_id' => 'required|exists:projects,id',
-            'releaseItems' => 'required|array|min:1',
-            'releaseItems.*.inventory_id' => 'required|exists:inventories,id',
-            'releaseItems.*.quantity_used' => 'required|integer|min:1',
-            'releaseItems.*.cost_per_unit' => 'required|numeric|min:0',
-        ]);
 
-        $client = Client::find($this->client_id);
-        if (!$client) {
-            session()->flash('message', 'Selected client not found.');
+        // Validate client selection
+        if (empty($this->client_id)) {
+            $this->addError('client_id', 'Please select a client before saving the release.');
             return;
         }
 
-        // Regular users must request approval
-        if ($user->role === 'user') {
-            $this->submitMasterlistApprovalRequest($client);
+        // Check if client is selected and projects are available but none selected
+        if ($this->client_id && !empty($this->projects) && empty($this->project_id)) {
+            $this->addError('project_id', 'Please select a project for this client before saving.');
             return;
         }
-        
-        // System Admin only: Direct release
-        if (!$user->isSystemAdmin()) {
-            abort(403, 'Access denied. Insufficient privileges.');
-        }
 
-        // Continue with direct release for admins
         try {
-            $createdExpenses = [];
-            $updatedInventories = [];
-
-            \DB::beginTransaction();
-
+            // Clean formatted number strings before validation
+            $cleanedReleaseItems = [];
             foreach ($this->releaseItems as $item) {
-                $inventory = Inventory::find($item['inventory_id']);
-                if (!$inventory) {
-                    \DB::rollBack();
-                    session()->flash('message', 'One of the selected inventory items not found.');
-                    return;
-                }
-
-                if ($item['quantity_used'] > $inventory->quantity) {
-                    \DB::rollBack();
-                    $this->addError('releaseItems', "Quantity for {$inventory->brand} exceeds available stock ({$inventory->quantity}).");
-                    return;
-                }
-
-                $totalCost = round($item['quantity_used'] * (float)$item['cost_per_unit'], 2);
-
-                // Create expense
-                $expense = Expense::create([
-                    'client_id' => $this->client_id,
-                    'project_id' => $this->project_id,
+                $cleanedReleaseItems[] = [
                     'inventory_id' => $item['inventory_id'],
-                    'quantity_used' => $item['quantity_used'],
-                    'cost_per_unit' => $item['cost_per_unit'],
-                    'total_cost' => $totalCost,
-                    'released_at' => now(),
-                ]);
-
-                $createdExpenses[] = $expense;
-
-                // Update inventory
-                $newQuantity = $inventory->quantity - $item['quantity_used'];
-                $newStatus = $newQuantity <= 0
-                    ? InventoryStatus::OUT_OF_STOCK
-                    : ($newQuantity <= $inventory->min_stock_level
-                        ? InventoryStatus::CRITICAL
-                        : InventoryStatus::NORMAL);
-
-                $inventory->update([
-                    'quantity' => max(0, $newQuantity),
-                    'status' => $newStatus->value,
-                ]);
-
-                $updatedInventories[] = $inventory;
-
-                // Log expense creation
-                History::create([
-                    'user_id' => auth()->id(),
-                    'action' => 'create',
-                    'model' => 'expense',
-                    'model_id' => $expense->id,
-                    'changes' => [
-                        'client_id' => $expense->client_id,
-                        'inventory_id' => $expense->inventory_id,
-                        'quantity_used' => $expense->quantity_used,
-                        'cost_per_unit' => $expense->cost_per_unit,
-                        'total_cost' => $expense->total_cost,
-                    ],
-                ]);
+                    'quantity_used' => (int) str_replace(',', '', $item['quantity_used'] ?? '0'),
+                    'cost_per_unit' => (float) str_replace(',', '', $item['cost_per_unit'] ?? '0'),
+                ];
             }
 
-            // Log inventory updates
-            foreach ($updatedInventories as $inventory) {
-                History::create([
-                    'user_id' => auth()->id(),
-                    'action' => 'update',
-                    'model' => 'inventory',
-                    'model_id' => $inventory->id,
-                    'changes' => [
-                        'quantity' => $inventory->quantity,
-                        'status' => $inventory->status instanceof InventoryStatus
-                            ? $inventory->status->value
-                            : $inventory->status,
-                    ],
-                ]);
+            // Temporarily replace releaseItems with cleaned values for validation
+            $originalReleaseItems = $this->releaseItems;
+            $this->releaseItems = $cleanedReleaseItems;
+
+            // Conditionally validate project_id only if projects are available for the client
+            $rules = [
+                'client_id' => 'required|exists:clients,id',
+                'releaseItems' => 'required|array|min:1',
+                'releaseItems.*.inventory_id' => 'required|exists:inventories,id',
+                'releaseItems.*.quantity_used' => 'required|integer|min:1',
+                'releaseItems.*.cost_per_unit' => 'required|numeric|min:0',
+            ];
+
+            // Only require project_id if projects are available for the selected client
+            if (!empty($this->projects)) {
+                $rules['project_id'] = 'required|exists:projects,id';
             }
 
-            \DB::commit();
+            $this->validate($rules);
 
-            // Refresh data
-            $this->loadInventories();
-            $this->clients = Client::with('expenses')->get();
+            // Use cleaned values for processing
+            $this->releaseItems = $cleanedReleaseItems;
 
-            $this->closeModal();
-            session()->flash('message', count($createdExpenses) . ' release(s) recorded and inventory updated successfully.');
+            $client = Client::find($this->client_id);
+            if (!$client) {
+                session()->flash('error', 'Selected client not found.');
+                $this->releaseItems = $originalReleaseItems; // Restore on error
+                return;
+            }
 
+            $project = \App\Models\Project::find($this->project_id);
+            if (!$project) {
+                session()->flash('error', 'Selected project not found.');
+                $this->releaseItems = $originalReleaseItems; // Restore on error
+                return;
+            }
+
+            // All users now submit approval requests for uniformity
+            // This ensures consistent history recording and approval workflow
+            $this->submitMasterlistApprovalRequest($client);
+
+            // Restore original formatted values after processing
+            $this->releaseItems = $originalReleaseItems;
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            // Validation errors are automatically handled by Livewire
+            return;
         } catch (\Exception $e) {
-            \DB::rollBack();
-            session()->flash('message', 'An error occurred while processing the release.');
-            \Log::error('Release save error: ' . $e->getMessage());
+            \Log::error('Save release error: ' . $e->getMessage());
+            session()->flash('error', 'An error occurred while saving the release. Please try again.');
+            $this->closeModal();
         }
     }
 
@@ -535,14 +644,19 @@ class Masterlist extends Component
     {
         $this->ensureAdmin();
 
-        $this->validate([
+        $rules = [
             'brand' => 'required|string|max:255',
             'description' => 'required|string|max:1000',
             'category' => 'required|string|max:255|in:' . implode(',', Inventory::CATEGORIES),
-            'quantity' => 'required|integer|min:0',
-            'min_stock_level' => 'required|integer|min:0',
+            'min_stock_level' => 'required|string|regex:/^[0-9,]+$/|min:1',
             'image' => 'nullable|image|mimes:png,jpg,jpeg|max:5120',
-        ]);
+        ];
+
+        if (!$this->editing) {
+            $rules['quantity'] = 'required|string|regex:/^[0-9,]+$/|min:1';
+        }
+
+        $this->validate($rules);
 
         // Password validation for editing
         if ($this->editing) {
@@ -558,12 +672,7 @@ class Masterlist extends Component
 
         $wasEditing = $this->editing;
 
-        // Auto-set status based on quantity and min_stock_level
-        $status = $this->quantity <= 0
-            ? InventoryStatus::OUT_OF_STOCK
-            : ($this->quantity <= $this->min_stock_level
-                ? InventoryStatus::CRITICAL
-                : InventoryStatus::NORMAL);
+        $minStockLevelInt = (int) str_replace(',', '', $this->min_stock_level);
 
         try {
             if ($this->editing) {
@@ -583,42 +692,80 @@ class Masterlist extends Component
                     'status' => $inventory->status
                 ];
 
-                $inventory->update([
+                // Calculate status based on current quantity and new min stock level
+                $currentQuantity = $inventory->quantity;
+                $status = $currentQuantity <= 0
+                    ? InventoryStatus::OUT_OF_STOCK
+                    : ($currentQuantity <= $minStockLevelInt
+                        ? InventoryStatus::CRITICAL
+                        : InventoryStatus::NORMAL);
+
+                // Prepare new values (quantity is no longer editable in edit form)
+                $newValues = [
                     'brand' => $this->brand,
                     'description' => $this->description,
                     'category' => $this->category,
-                    'quantity' => $this->quantity,
-                    'min_stock_level' => $this->min_stock_level,
+                    'quantity' => $currentQuantity, // Keep existing quantity
+                    'min_stock_level' => $minStockLevelInt,
                     'status' => $status->value,
-                ]);
+                ];
+    
+                // Check for actual changes (exclude calculated fields like status)
+                $changes = [];
+                $userEditableFields = ['brand', 'description', 'category', 'min_stock_level']; // Fields user can directly edit
+                foreach ($newValues as $field => $newValue) {
+                    if (in_array($field, $userEditableFields) && $oldValues[$field] != $newValue) {
+                        $changes[$field] = $newValue;
+                    }
+                }
+    
+                // Only proceed if there are actual changes
+                if (empty($changes)) {
+                    $this->closeModal();
+                    return;
+                }
+    
+                $inventory->update($newValues);
 
-                // Log history with old and new values
+                // Log history with old values and only actual changes
                 History::create([
                     'user_id' => auth()->id(),
-                    'action' => 'update',
+                    'action' => 'edit',
                     'model' => 'inventory',
                     'model_id' => $inventory->id,
                     'old_values' => $oldValues,
-                    'changes' => [
-                        'brand' => $this->brand,
-                        'description' => $this->description,
-                        'category' => $this->category,
-                        'quantity' => $this->quantity,
-                        'min_stock_level' => $this->min_stock_level,
-                        'status' => $status->value
-                    ],
+                    'changes' => $changes, // Only log actual changes
                 ]);
             } else {
+                // For new inventory, create with quantity 0, then add initial stock if provided
+                $quantityInt = (int) str_replace(',', '', $this->quantity);
+                $status = $quantityInt <= 0
+                    ? InventoryStatus::OUT_OF_STOCK
+                    : ($quantityInt <= $minStockLevelInt
+                        ? InventoryStatus::CRITICAL
+                        : InventoryStatus::NORMAL);
+
                 $inventory = Inventory::create([
                     'brand' => $this->brand,
                     'description' => $this->description,
                     'category' => $this->category,
-                    'quantity' => $this->quantity,
-                    'min_stock_level' => $this->min_stock_level,
-                    'status' => $status->value,
+                    'quantity' => 0, // Start with 0
+                    'min_stock_level' => $minStockLevelInt,
+                    'status' => InventoryStatus::OUT_OF_STOCK->value, // Initially out of stock
                 ]);
 
-                // Log history
+                // If initial quantity provided, add it as inbound stock
+                if ($quantityInt > 0) {
+                    $inventory->addInboundStock($quantityInt, auth()->id(), [
+                        'supplier' => null,
+                        'date_received' => now()->toDateString(),
+                        'notes' => 'Initial physical count',
+                    ]);
+                    // Update status after adding stock
+                    $inventory->updateStatus();
+                }
+
+                // Log history for creation
                 History::create([
                     'user_id' => auth()->id(),
                     'action' => 'create',
@@ -628,9 +775,9 @@ class Masterlist extends Component
                         'brand' => $this->brand,
                         'description' => $this->description,
                         'category' => $this->category,
-                        'quantity' => $this->quantity,
-                        'min_stock_level' => $this->min_stock_level,
-                        'status' => $status->value
+                        'quantity' => $quantityInt, // Log the intended quantity
+                        'min_stock_level' => $minStockLevelInt,
+                        'status' => $inventory->status // Use current status after potential update
                     ],
                 ]);
             }
@@ -722,6 +869,13 @@ class Masterlist extends Component
         $this->resetSelection();
     }
 
+    public function filterByCategory($category)
+    {
+        $this->categoryFilter = $category;
+        $this->loadInventories();
+        $this->resetSelection();
+    }
+
     public function updatedSelectAll($value)
     {
         if ($value) {
@@ -742,6 +896,23 @@ class Masterlist extends Component
 
         if (empty($this->selectedItems)) {
             session()->flash('message', 'No items selected for deletion.');
+            return;
+        }
+
+        $this->showBulkDeleteModal = true;
+    }
+
+    public function confirmBulkDelete()
+    {
+        $this->ensureAdmin();
+
+        $this->validate([
+            'bulkDeletePassword' => 'required',
+        ]);
+
+        // Check password
+        if (!\Illuminate\Support\Facades\Hash::check($this->bulkDeletePassword, auth()->user()->password)) {
+            $this->addError('bulkDeletePassword', 'The password is incorrect.');
             return;
         }
 
@@ -773,6 +944,7 @@ class Masterlist extends Component
 
         $this->loadInventories();
         $this->resetSelection();
+        $this->closeModal();
         session()->flash('message', count($this->selectedItems) . ' items deleted successfully.');
     }
 
@@ -780,6 +952,72 @@ class Masterlist extends Component
     {
         $this->selectAll = false;
         $this->selectedItems = [];
+    }
+
+    /**
+     * Switch to a different tab.
+     */
+    public function switchTab(string $tab): void
+    {
+        $this->activeTab = $tab;
+    }
+
+    /**
+     * Add inbound stock to the current inventory item.
+     */
+    public function addInboundStock(): void
+    {
+        $this->ensureAdmin();
+
+        $this->validate([
+            'inboundQuantity' => 'required|string|regex:/^[0-9,]+$/|min:1',
+            'supplier' => 'nullable|string|max:255',
+            'dateReceived' => 'nullable|date',
+            'inboundNotes' => 'nullable|string|max:1000',
+        ]);
+
+        $inventory = Inventory::find($this->inventoryId);
+        if (!$inventory) {
+            session()->flash('message', 'Inventory item not found.');
+            return;
+        }
+
+        $quantityInt = (int) str_replace(',', '', $this->inboundQuantity);
+
+        $additionalData = [
+            'supplier' => $this->supplier ?: null,
+            'date_received' => $this->dateReceived ?: null,
+            'notes' => $this->inboundNotes ?: null,
+        ];
+
+        if ($inventory->addInboundStock($quantityInt, auth()->id(), $additionalData)) {
+            $this->loadInventories();
+            $this->resetInboundForm();
+            session()->flash('message', "Successfully added {$quantityInt} units to inventory.");
+            $this->closeModal(); // Close modal after successful stock addition
+        } else {
+            session()->flash('message', 'Failed to add inbound stock.');
+        }
+    }
+
+    /**
+     * Get filtered stock movements for the current inventory.
+     */
+    public function getFilteredStockMovements()
+    {
+        $query = StockMovement::where('inventory_id', $this->inventoryId)
+            ->with(['user'])
+            ->orderBy('created_at', 'desc');
+
+        if (!empty($this->movementTypeFilter)) {
+            $query->where('movement_type', $this->movementTypeFilter);
+        }
+
+        if (!empty($this->movementDateFilter)) {
+            $query->whereDate('created_at', $this->movementDateFilter);
+        }
+
+        return $query->get();
     }
 
     /**

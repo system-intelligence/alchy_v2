@@ -109,23 +109,27 @@ class Tools extends Component
                 'has_image' => $tool->hasImageBlob(),
             ];
             $tool->update($data);
-            History::create([
-                'user_id' => auth()->id(),
-                'action' => 'update',
-                'model' => 'tool',
-                'model_id' => $tool->id,
-                'old_values' => $oldValues,
-                'changes' => [
-                    'quantity' => $data['quantity'],
-                    'brand' => $data['brand'],
-                    'model' => $data['model'],
-                    'description' => $data['description'],
-                    'ownership_type' => $data['ownership_type'],
-                    'released_to' => $data['released_to'],
-                    'release_date' => $data['release_date'],
-                    'has_image' => isset($data['image_blob']),
-                ],
-            ]);
+
+            // Check for actual changes (exclude calculated fields like has_image)
+            $changes = [];
+            $userEditableFields = ['quantity', 'brand', 'model', 'description', 'ownership_type', 'released_to', 'release_date'];
+            foreach ($userEditableFields as $field) {
+                if (isset($data[$field]) && $oldValues[$field] != $data[$field]) {
+                    $changes[$field] = $data[$field];
+                }
+            }
+
+            // Only log if there are actual changes
+            if (!empty($changes)) {
+                History::create([
+                    'user_id' => auth()->id(),
+                    'action' => 'update',
+                    'model' => 'tool',
+                    'model_id' => $tool->id,
+                    'old_values' => $oldValues,
+                    'changes' => $changes,
+                ]);
+            }
             session()->flash('message', 'Tool updated successfully.');
         } else {
             $tool = Tool::create($data);
@@ -142,7 +146,7 @@ class Tools extends Component
                     'ownership_type' => $data['ownership_type'],
                     'released_to' => $data['released_to'],
                     'release_date' => $data['release_date'],
-                    'has_image' => isset($data['image_blob']),
+                    // has_image is calculated, don't include in changes for create either
                 ],
             ]);
             session()->flash('message', 'Tool added successfully.');

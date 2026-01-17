@@ -35,6 +35,7 @@ class Client extends Model
     protected $fillable = [
         'name',
         'branch',
+        'client_type',
         'start_date',
         'end_date',
         'job_type',
@@ -43,7 +44,7 @@ class Client extends Model
         'image_mime_type',
         'image_filename'
     ];
-
+    
     /**
      * Get the attributes that should be cast.
      *
@@ -56,6 +57,11 @@ class Client extends Model
             'end_date' => 'date',
         ]; 
     }
+
+    /**
+     * Valid client types.
+     */
+    public const CLIENT_TYPES = ['banking', 'non_banking'];
 
     /**
      * Valid job types for clients.
@@ -128,22 +134,35 @@ class Client extends Model
      * @return bool
      */
     public function storeImageAsBlob(string $imagePath): bool
-    {
-        if (!file_exists($imagePath)) {
-            return false;
-        }
+     {
+         if (!file_exists($imagePath)) {
+             \Log::error('Client image upload failed: file does not exist', ['path' => $imagePath]);
+             return false;
+         }
 
-        $imageData = file_get_contents($imagePath);
-        if ($imageData === false) {
-            return false;
-        }
+         $imageData = file_get_contents($imagePath);
+         if ($imageData === false) {
+             \Log::error('Client image upload failed: could not read file', ['path' => $imagePath]);
+             return false;
+         }
 
-        $this->image_blob = base64_encode($imageData);
-        $this->image_mime_type = mime_content_type($imagePath);
-        $this->image_filename = basename($imagePath);
+         $mimeType = mime_content_type($imagePath);
+         if (!$mimeType || !str_starts_with($mimeType, 'image/')) {
+             \Log::error('Client image upload failed: invalid mime type', ['path' => $imagePath, 'mime' => $mimeType]);
+             return false;
+         }
 
-        return $this->save();
-    }
+         $this->image_blob = base64_encode($imageData);
+         $this->image_mime_type = $mimeType;
+         $this->image_filename = basename($imagePath);
+
+         if (!$this->save()) {
+             \Log::error('Client image upload failed: could not save to database', ['client_id' => $this->id]);
+             return false;
+         }
+
+         return true;
+     }
 
     /**
      * Get the image blob as data URL.
@@ -230,5 +249,96 @@ class Client extends Model
     public function isCompleted(): bool
     {
         return $this->status === 'settled';
+    }
+
+    /**
+     * Get detailed change information for history logging.
+     *
+     * @param array $oldValues
+     * @param array $newValues
+     * @return array
+     */
+    public function getHistoryChangeDetails(array $oldValues = [], array $newValues = []): array
+    {
+        $changes = [];
+
+        // Compare basic fields
+        $fieldsToCheck = ['name', 'branch', 'client_type', 'status'];
+
+        foreach ($fieldsToCheck as $field) {
+            if (!array_key_exists($field, $newValues)) {
+                continue; // Only check fields that are being updated
+            }
+
+            $oldValue = $oldValues[$field] ?? null;
+            $newValue = $newValues[$field];
+
+            if ($oldValue !== $newValue) {
+                $changes[$field] = [
+                    'old' => $oldValue,
+                    'new' => $newValue,
+                    'field_name' => ucfirst(str_replace('_', ' ', $field)),
+                ];
+            }
+        }
+
+        // Handle logo changes
+        $logoChanged = isset($newValues['logo_updated']) && $newValues['logo_updated'];
+        if ($logoChanged) {
+            $changes['logo'] = [
+                'old' => $this->hasImageBlob() ? 'Has logo' : 'No logo',
+                'new' => 'Logo updated',
+                'field_name' => 'Logo',
+            ];
+        }
+
+        return $changes;
+    }
+
+    /**
+     * Get comprehensive details for history logging on deletion.
+     *
+     * @return array
+     */
+    public function getHistoryDeletionDetails(): array
+    {
+        return [
+            'name' => $this->name,
+            'branch' => $this->branch,
+            'client_type' => $this->client_type,
+            'status' => $this->status,
+            'has_logo' => $this->hasImageBlob(),
+            'total_expenses' => $this->expenses()->sum('total_cost'),
+            'expense_count' => $this->expenses()->count(),
+            'project_count' => $this->projects()->count(),
+            'start_date' => $this->start_date?->format('Y-m-d'),
+            'end_date' => $this->end_date?->format('Y-m-d'),
+            'job_type' => $this->job_type,
+            'deleted' => true,
+        ];
+    }
+
+    /**
+     * Get formatted change summary for notifications.
+     *
+     * @param array $changes
+     * @return string
+     */
+    public function getChangeSummary(array $changes): string
+    {
+        if (empty($changes)) {
+            return 'No changes detected';
+        }
+
+        $changeDescriptions = [];
+        foreach ($changes as $field => $changeData) {
+            $fieldName = $changeData['field_name'] ?? ucfirst(str_replace('_', ' ', $field));
+            $oldValue = $changeData['old'] ?? 'N/A';
+            $newValue = $changeData['new'] ?? 'N/A';
+
+            $changeDescriptions[] = "{$fieldName}: {$oldValue} → {$newValue}";
+        }
+
+        return implode(', ', $changeDescriptions);
     }
 }

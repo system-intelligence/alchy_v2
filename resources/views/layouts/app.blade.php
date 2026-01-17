@@ -63,7 +63,7 @@
                                 <x-heroicon-o-wrench-screwdriver class="w-5 h-5 mr-3" />
                                 Tools & Equipment
                             </a>
-                            @if(!auth()->user()->isUser())
+                            @if(auth()->user()->isSystemAdmin())
                             <a href="{{ route('expenses') }}" @class([
                                 'flex items-center py-3 px-3 rounded-lg transition duration-200 text-gray-300 hover:text-primary-400 hover:bg-[#172033]',
                                 'bg-[#172033] text-primary-400 border-r-2 border-primary-500' => request()->routeIs('expenses'),
@@ -147,6 +147,7 @@
 
     @livewireScripts
     <livewire:chat-widget />
+    <livewire:notification-toast />
     <script>
         document.getElementById('sidebar-toggle').addEventListener('click', function() {
             document.getElementById('sidebar').classList.toggle('-translate-x-full');

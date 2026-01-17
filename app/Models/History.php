@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *
  * Tracks all user actions and changes in the system for audit purposes.
  *
- * Security Feature: For update actions, both old_values and changes should be stored
+ * Security Feature: For update actions, both old_values and changes should be stored   
  * to allow comparison of before/after states for security auditing.
  *
  * Example usage for updates:
@@ -104,10 +104,13 @@ class History extends Model
         return match ($this->action) {
             'create' => 'Created',
             'update' => 'Updated',
+            'edit' => 'Edited',
             'delete' => 'Deleted',
             'login' => 'Logged in',
             'logout' => 'Logged out',
             'export' => 'Exported',
+            'Stock Movement Recorded' => 'Inbound',
+            'Inbound Stock Added' => 'Inbound',
             default => ucfirst($this->action),
         };
     }
@@ -126,6 +129,7 @@ class History extends Model
             'user' => 'User',
             'material_release_approval' => 'Material Release Approval',
             'MaterialReleaseApproval' => 'Material Release Approval',
+            'StockMovement' => 'Stock Movement',
             default => ucfirst($this->model),
         };
     }
@@ -164,5 +168,45 @@ class History extends Model
     public function scopeByUser($query, int $userId)
     {
         return $query->where('user_id', $userId);
+    }
+
+    /**
+     * Get the related project for project model histories.
+     */
+    public function projectRelation()
+    {
+        return $this->belongsTo(\App\Models\Project::class, 'model_id')->where('model', 'project');
+    }
+
+    /**
+     * Get the related expense for expense model histories.
+     */
+    public function expenseRelation()
+    {
+        return $this->belongsTo(\App\Models\Expense::class, 'model_id')->where('model', 'expense');
+    }
+
+    /**
+     * Get the related client for client model histories.
+     */
+    public function clientRelation()
+    {
+        return $this->belongsTo(\App\Models\Client::class, 'model_id')->where('model', 'client');
+    }
+
+    /**
+     * Get the related inventory for inventory model histories.
+     */
+    public function inventoryRelation()
+    {
+        return $this->belongsTo(\App\Models\Inventory::class, 'model_id')->where('model', 'inventory');
+    }
+
+    /**
+     * Get the related approval for MaterialReleaseApproval model histories.
+     */
+    public function approvalRelation()
+    {
+        return $this->belongsTo(\App\Models\MaterialReleaseApproval::class, 'model_id')->where('model', 'MaterialReleaseApproval');
     }
 }

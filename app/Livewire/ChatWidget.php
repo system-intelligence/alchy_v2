@@ -11,7 +11,8 @@ use App\Models\History;
 use App\Notifications\NewMessagePush;
 use App\Events\ApprovalActionTaken;
 use App\Events\HistoryEntryCreated;
-use Illuminate\Support\Facades\Log;                                                                            
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 use Livewire\Component;
 
 class ChatWidget extends Component
@@ -28,7 +29,7 @@ class ChatWidget extends Component
     public $unreadCounts = [];
     public $groupUnreadCount = 0;
     private $lastMessageCheck = null;
-    private $processedMessageIds = [];
+    public $processedMessageIds = [];
 
     protected $listeners = [
         'messageReceived' => 'loadMessages',
@@ -37,10 +38,22 @@ class ChatWidget extends Component
         'approvalActionTaken' => 'handleApprovalAction',
     ];
 
+
     public function mount()
     {
         $this->loadUsers();
         $this->loadUnreadCounts();
+
+        // Initialize processed message IDs with recent messages to prevent spam
+        $recentMessages = Chat::where(function ($query) {
+            $query->where('recipient_id', auth()->id())
+                  ->orWhere('group_id', self::GROUP_CHAT_ID);
+        })
+        ->where('created_at', '>', now()->subMinutes(15))
+        ->pluck('id')
+        ->toArray();
+
+        $this->processedMessageIds = $recentMessages;
     }
 
     public function loadUnreadCounts()
@@ -70,11 +83,14 @@ class ChatWidget extends Component
 
     public function loadUsers()
     {
-        $this->users = User::where('id', '!=', auth()->id())
-            ->when($this->search, function ($query) {
-                $query->where('name', 'like', '%' . $this->search . '%');
-            })
-            ->get();
+        $cacheKey = 'chat_users_' . auth()->id() . '_' . md5($this->search);
+        $this->users = Cache::remember($cacheKey, 300, function () { // Cache for 5 minutes
+            return User::where('id', '!=', auth()->id())
+                ->when($this->search, function ($query) {
+                    $query->where('name', 'like', '%' . $this->search . '%');
+                })
+                ->get();
+        });
 
         // Ensure unread counts map has keys for all users
         foreach ($this->users as $u) {
@@ -186,6 +202,31 @@ class ChatWidget extends Component
                 // Load the user relationship for broadcasting
                 $chat->loadMissing('user');
 
+                // Update unread counts for all users except sender
+                $allUsers = User::where('id', '!=', auth()->id())->get();
+                foreach ($allUsers as $user) {
+                    $currentCounts = $user->unread_private_counts ?? [];
+                    $currentGroupCount = $user->unread_group_count ?? 0;
+                    $user->update([
+                        'unread_group_count' => $currentGroupCount + 1,
+                        'unread_private_counts' => $currentCounts, // Keep private counts unchanged
+                    ]);
+                }
+
+                // Optimistic UI update for instant feel
+                $this->messages->push($chat);
+                $this->newMessage = '';
+                $this->dispatch('messagesLoaded');
+                $this->dispatch('messages-updated');
+                $this->dispatch('message-sent-notification', [
+                    'message' => 'Message sent successfully!',
+                    'type' => 'success',
+                    'duration' => 5000
+                ]);
+
+                // Play sound notification for sender
+                $this->dispatch('playSoundNotification');
+
                 // Broadcast to all users (MessageSent expects a Chat model)
                 event(new \App\Events\MessageSent($chat));
             } else {
@@ -200,6 +241,30 @@ class ChatWidget extends Component
                     'message' => $this->newMessage,
                 ]);
 
+                // Update unread count for recipient
+                $recipient = $this->selectedUser;
+                $currentCounts = $recipient->unread_private_counts ?? [];
+                $senderId = (string) auth()->id();
+                $currentCounts[$senderId] = ($currentCounts[$senderId] ?? 0) + 1;
+
+                $recipient->update([
+                    'unread_private_counts' => $currentCounts,
+                ]);
+
+                // Optimistic UI update for instant feel
+                $this->messages->push($chat);
+                $this->newMessage = '';
+                $this->dispatch('messagesLoaded');
+                $this->dispatch('messages-updated');
+                $this->dispatch('message-sent-notification', [
+                    'message' => 'Message sent successfully!',
+                    'type' => 'success',
+                    'duration' => 5000
+                ]);
+
+                // Play sound notification for sender
+                $this->dispatch('playSoundNotification');
+
                 // Broadcast the message
                 event(new \App\Events\MessageSent($chat));
 
@@ -212,18 +277,6 @@ class ChatWidget extends Component
                     \Log::warning('NewMessagePush notify failed: ' . $e->getMessage());
                 }
             }
-
-            $this->newMessage = '';
-            $this->loadMessages();
-
-            // Emit events for UI updates
-            $this->dispatch('messagesLoaded');
-            $this->dispatch('messages-updated');
-            $this->dispatch('message-sent-notification', [
-                'message' => 'Message sent successfully!',
-                'type' => 'success',
-                'duration' => 5000
-            ]);
         } catch (\Throwable $e) {
             \Log::error('Failed to send message: ' . $e->getMessage());
             $this->dispatch('message-sent-notification', [
@@ -231,6 +284,8 @@ class ChatWidget extends Component
                 'type' => 'error',
                 'duration' => 3000
             ]);
+            // Reload messages to remove the optimistic message if save failed
+            $this->loadMessages();
         }
     }
 
@@ -272,16 +327,16 @@ class ChatWidget extends Component
 
         // If this is a group message for the main group, handle it here
         if ($groupId && $groupId === self::GROUP_CHAT_ID) {
+            // Reload unread counts from database since they were updated when message was sent
+            $this->loadUnreadCounts();
+
             // If the user currently has the group chat open, reload messages
             if ($this->isOpen && $this->isGroupChat) {
                 $this->loadMessages();
                 $this->dispatch('messagesLoaded');
                 $this->dispatch('messages-updated');
             } else {
-                // Increment unread count for group
-                $this->groupUnreadCount = ($this->groupUnreadCount ?? 0) + 1;
-                $this->saveUnreadCounts();
-                // Force UI update
+                // Force UI update to show updated unread count
                 $this->dispatch('$refresh');
 
                 $senderName = $payload['user_name'] ?? 'Someone';
@@ -292,10 +347,8 @@ class ChatWidget extends Component
                     'duration' => 5000
                 ]);
 
-                $this->dispatch('browserNotification', [
-                    'message' => $messageText,
-                    'senderName' => $senderName
-                ]);
+                // Play sound notification
+                $this->dispatch('playSoundNotification');
             }
 
             return;
@@ -314,24 +367,18 @@ class ChatWidget extends Component
             }
         }
 
-        // If chat is open with the sender, refresh messages; otherwise increment unread count
+        // Reload unread counts from database since they were updated when message was sent
+        $this->loadUnreadCounts();
+
+        // If chat is open with the sender, refresh messages; otherwise show notification
         if ($this->isOpen && $this->selectedUser && $this->selectedUser->id == $senderId) {
             // Reload messages to show the new message
             $this->loadMessages();
             $this->dispatch('messagesLoaded');
             $this->dispatch('messages-updated');
         } else {
-            if ($senderId) {
-                // Initialize if not exists
-                if (!isset($this->unreadCounts[$senderId])) {
-                    $this->unreadCounts[$senderId] = 0;
-                }
-                $this->unreadCounts[$senderId]++;
-                $this->saveUnreadCounts();
-
-                // Force UI update
-                $this->dispatch('$refresh');
-            }
+            // Force UI update to show updated unread count
+            $this->dispatch('$refresh');
 
             $senderName = $payload['user_name'] ?? 'Someone';
             $messageText = $payload['message'] ?? '';
@@ -342,11 +389,8 @@ class ChatWidget extends Component
                 'duration' => 5000
             ]);
 
-            // Browser notification hook
-            $this->dispatch('browserNotification', [
-                'message' => $payload['message'] ?? '',
-                'senderName' => $senderName
-            ]);
+            // Play sound notification
+            $this->dispatch('playSoundNotification');
         }
     }
 
@@ -442,9 +486,22 @@ class ChatWidget extends Component
                 }
             }
 
-            // Create history entry for inventory change - REMOVED to avoid duplication
-            // The approval history already shows all necessary details
-            Log::info('Skipping inventory history creation to avoid duplication');
+            // Create history entry for outbound stock removal
+            \App\Models\History::create([
+                'user_id' => auth()->id(),
+                'action' => 'Outbound Stock Removed',
+                'model' => 'inventory',
+                'model_id' => $inventory->id,
+                'old_values' => [
+                    'quantity' => $oldQuantity,
+                ],
+                'changes' => [
+                    'quantity' => -$approval->quantity_requested,
+                    'notes' => "Released to client: {$approval->client}",
+                    'reference' => 'expense_' . ($expense->id ?? 'unknown'),
+                ],
+            ]);
+            Log::info('Outbound stock history created');
 
             // Update existing history entry or create new
             $existingHistory = History::where('model', 'MaterialReleaseApproval')
@@ -453,36 +510,48 @@ class ChatWidget extends Component
 
             if ($existingHistory) {
                 // Update existing history with completion details
+                $changes = [
+                    'status' => 'approved',
+                    'project' => $approval->project ?? 'N/A',
+                    'client' => $approval->client ?? 'N/A',
+                    'material' => $inventory->material_name,
+                    'quantity' => $approval->quantity_requested,
+                    'approved_by' => auth()->user()->name,
+                    'completed_at' => now()->toDateTimeString(),
+                ];
+
+                if (auth()->id() === $approval->requested_by) {
+                    $changes['auto_approved'] = true;
+                }
+
                 $existingHistory->update([
-                    'action' => 'Approval Request Completed',
-                    'changes' => json_encode([
-                        'status' => 'approved',
-                        'project' => $approval->project ?? 'N/A',
-                        'client' => $approval->client ?? 'N/A',
-                        'material' => $inventory->material_name,
-                        'quantity' => $approval->quantity_requested,
-                        'reviewer' => auth()->user()->name,
-                        'completed_at' => now()->toDateTimeString(),
-                    ]),
+                    'action' => 'Material Release Completed',
+                    'changes' => json_encode($changes),
                 ]);
                 $approvalHistory = $existingHistory;
                 Log::info('Approval history updated', ['history_id' => $approvalHistory->id]);
             } else {
                 // Create new if not found
+                $changes = [
+                    'status' => 'approved',
+                    'project' => $approval->project ?? 'N/A',
+                    'client' => $approval->client ?? 'N/A',
+                    'material' => $inventory->material_name,
+                    'quantity' => $approval->quantity_requested,
+                    'approved_by' => auth()->user()->name,
+                    'completed_at' => now()->toDateTimeString(),
+                ];
+
+                if (auth()->id() === $approval->requested_by) {
+                    $changes['auto_approved'] = true;
+                }
+
                 $approvalHistory = History::create([
                     'user_id' => $approval->requested_by,
-                    'action' => 'Approval Request Completed',
+                    'action' => 'Material Release Completed',
                     'model' => 'MaterialReleaseApproval',
                     'model_id' => $approval->id,
-                    'changes' => json_encode([
-                        'status' => 'approved',
-                        'project' => $approval->project ?? 'N/A',
-                        'client' => $approval->client ?? 'N/A',
-                        'material' => $inventory->material_name,
-                        'quantity' => $approval->quantity_requested,
-                        'reviewer' => auth()->user()->name,
-                        'completed_at' => now()->toDateTimeString(),
-                    ]),
+                    'changes' => json_encode($changes),
                     'old_values' => json_encode([
                         'status' => 'pending'
                     ])
@@ -514,11 +583,23 @@ class ChatWidget extends Component
                 'user_id' => auth()->id(),
                 'recipient_id' => $approval->requested_by,
                 'message' => "✅ Your material release request has been APPROVED!\n\n" .
-                             "Material: {$inventory->material_name}\n" .
-                             "Quantity: {$approval->quantity_requested}\n" .
-                             "Released by: " . auth()->user()->name,
+                              "Material: {$inventory->material_name}\n" .
+                              "Quantity: {$approval->quantity_requested}\n" .
+                              "Approved by: " . auth()->user()->name,
             ]);
             Log::info('Chat notification sent', ['chat_id' => $notificationChat->id]);
+
+            // Update unread count for recipient
+            $recipient = User::find($approval->requested_by);
+            if ($recipient) {
+                $currentCounts = $recipient->unread_private_counts ?? [];
+                $senderId = (string) auth()->id();
+                $currentCounts[$senderId] = ($currentCounts[$senderId] ?? 0) + 1;
+
+                $recipient->update([
+                    'unread_private_counts' => $currentCounts,
+                ]);
+            }
 
             // Broadcast the chat message event
             try {
@@ -585,14 +666,14 @@ class ChatWidget extends Component
             if ($existingHistory) {
                 // Update existing history with completion details
                 $existingHistory->update([
-                    'action' => 'Approval Request Completed',
+                    'action' => 'Auto Declined by System Admin',
                     'changes' => json_encode([
                         'status' => 'declined',
                         'project' => $approval->project ?? 'N/A',
                         'client' => $approval->client ?? 'N/A',
                         'material' => $approval->inventory->material_name,
                         'quantity' => $approval->quantity_requested,
-                        'reviewer' => auth()->user()->name,
+                        'declined_by' => auth()->user()->name,
                         'reason' => $reason,
                         'completed_at' => now()->toDateTimeString(),
                     ]),
@@ -603,7 +684,7 @@ class ChatWidget extends Component
                 // Create new if not found
                 $approvalHistory = History::create([
                     'user_id' => $approval->requested_by,
-                    'action' => 'Approval Request Completed',
+                    'action' => 'Auto Declined by System Admin',
                     'model' => 'MaterialReleaseApproval',
                     'model_id' => $approval->id,
                     'changes' => json_encode([
@@ -612,7 +693,7 @@ class ChatWidget extends Component
                         'client' => $approval->client ?? 'N/A',
                         'material' => $approval->inventory->material_name,
                         'quantity' => $approval->quantity_requested,
-                        'reviewer' => auth()->user()->name,
+                        'declined_by' => auth()->user()->name,
                         'reason' => $reason,
                         'completed_at' => now()->toDateTimeString(),
                     ]),
@@ -653,6 +734,18 @@ class ChatWidget extends Component
                              "Declined by: " . auth()->user()->name,
             ]);
             Log::info('Decline chat notification sent', ['chat_id' => $notificationChat->id]);
+
+            // Update unread count for recipient
+            $recipient = User::find($approval->requested_by);
+            if ($recipient) {
+                $currentCounts = $recipient->unread_private_counts ?? [];
+                $senderId = (string) auth()->id();
+                $currentCounts[$senderId] = ($currentCounts[$senderId] ?? 0) + 1;
+
+                $recipient->update([
+                    'unread_private_counts' => $currentCounts,
+                ]);
+            }
 
             // Broadcast the chat message event
             try {
@@ -745,6 +838,86 @@ class ChatWidget extends Component
         }
 
         return null;
+    }
+
+    public function checkForUpdates()
+    {
+        // Update unread counts
+        $this->loadUnreadCounts();
+
+        // Check for new messages and show notifications
+        $this->checkForNewMessages();
+
+        // Refresh the UI
+        $this->dispatch('$refresh');
+    }
+
+    private function checkForNewMessages()
+    {
+        // Only check for messages from the last 15 minutes to avoid spam from old messages
+        $timeWindow = now()->subMinutes(15);
+
+        // Check for new private messages from any user (not already processed and within time window)
+        $newPrivateMessages = Chat::where('recipient_id', auth()->id())
+            ->where('group_id', null)
+            ->where('user_id', '!=', auth()->id())
+            ->where('created_at', '>', $timeWindow)
+            ->whereNotIn('id', $this->processedMessageIds)
+            ->with('user')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        foreach ($newPrivateMessages as $message) {
+            // Mark as processed to prevent duplicate notifications
+            $this->processedMessageIds[] = $message->id;
+
+            // Only show notification if this conversation is not currently open
+            if (!$this->isOpen || !$this->selectedUser || $this->selectedUser->id != $message->user_id) {
+                $this->dispatch('new-message-notification', [
+                    'message' => "New message from {$message->user->name}: {$message->message}",
+                    'type' => 'info',
+                    'duration' => 5000
+                ]);
+
+                $this->dispatch('browserNotification', [
+                    'message' => $message->message,
+                    'senderName' => $message->user->name
+                ]);
+            }
+        }
+
+        // Check for new group messages (not already processed and within time window)
+        $newGroupMessages = Chat::where('group_id', self::GROUP_CHAT_ID)
+            ->where('user_id', '!=', auth()->id())
+            ->where('created_at', '>', $timeWindow)
+            ->whereNotIn('id', $this->processedMessageIds)
+            ->with('user')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        foreach ($newGroupMessages as $message) {
+            // Mark as processed to prevent duplicate notifications
+            $this->processedMessageIds[] = $message->id;
+
+            // Only show notification if group chat is not currently open
+            if (!$this->isOpen || !$this->isGroupChat) {
+                $this->dispatch('new-message-notification', [
+                    'message' => "{$message->user->name}: {$message->message}",
+                    'type' => 'info',
+                    'duration' => 5000
+                ]);
+
+                $this->dispatch('browserNotification', [
+                    'message' => $message->message,
+                    'senderName' => $message->user->name
+                ]);
+            }
+        }
+
+        // Keep only the last 100 processed message IDs to prevent memory issues
+        if (count($this->processedMessageIds) > 100) {
+            $this->processedMessageIds = array_slice($this->processedMessageIds, -100);
+        }
     }
 
     public function render()

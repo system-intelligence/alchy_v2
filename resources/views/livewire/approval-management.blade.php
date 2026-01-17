@@ -99,6 +99,10 @@
                             <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">Quantity:</span>
                             <span class="text-sm font-medium text-gray-900 dark:text-white">{{ $approval->quantity_requested }}</span>
                         </div>
+                        <div class="bg-white/40 dark:bg-gray-800/40 px-3 py-2 rounded">
+                            <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">Cost per unit:</span>
+                            <span class="text-sm font-medium text-gray-900 dark:text-white">₱{{ number_format($approval->expense->cost_per_unit ?? 0, 2) }}</span>
+                        </div>
                         @if($approval->reason)
                             <div class="bg-white/40 dark:bg-gray-800/40 px-3 py-2 rounded">
                                 <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">Reason:</span>
@@ -179,6 +183,10 @@
                                 <div>
                                     <span class="text-xs text-gray-600 dark:text-gray-400">Available Stock:</span>
                                     <div class="text-base font-medium text-gray-900 dark:text-white">{{ $selectedApproval->inventory->quantity }}</div>
+                                </div>
+                                <div>
+                                    <span class="text-xs text-gray-600 dark:text-gray-400">Cost per unit:</span>
+                                    <div class="text-base font-medium text-gray-900 dark:text-white">₱{{ number_format($selectedApproval->expense->cost_per_unit ?? 0, 2) }}</div>
                                 </div>
                             </div>
                         </div>

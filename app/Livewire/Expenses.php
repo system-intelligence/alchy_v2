@@ -34,16 +34,24 @@ class Expenses extends Component
 
     // Filters & search
     public $search = '';
+    public $clientsSearch = '';
+    public $projectsSearch = '';
+    public $receiptsSearch = '';
     public $dateFrom = null;
     public $dateTo = null;
     public $clientFilter = '';
     public $projectFilter = '';
+    public $clientTypeFilter = '';
     public $clientStatusFilter = '';
     public $projectStatusFilter = '';
 
     // Edit expense
     public $editingExpenseId = null;
     public $editCostPerUnit = 0;
+
+    // Edit release
+    public $editingReleaseId = null;
+    public $editReleaseCostPerUnit = 0;
 
     // Date filter
     public $filterDate = null;
@@ -80,6 +88,7 @@ class Expenses extends Component
     public $clientId = null;
     public $clientName = '';
     public $clientBranch = '';
+    public $clientType = 'non_banking';
     public $clientLogo = null;
     public $calendarEvents = [];
 
@@ -134,6 +143,11 @@ class Expenses extends Component
     public $manageReleaseTime = '';
     public $manageReleaseNotes = '';
     public $manageReleaseDuplicateNotice = '';
+    public $manageProjectUpdateMessage = '';
+
+    // Release processing state
+    public $isReleasingMaterials = false;
+    public $releaseProcessingMessage = '';
 
     // Project notes tab
     public $manageProjectNotesList = [];
@@ -146,10 +160,14 @@ class Expenses extends Component
 
     protected $queryString = [
         'search' => ['except' => ''],
+        'clientsSearch' => ['except' => ''],
+        'projectsSearch' => ['except' => ''],
+        'receiptsSearch' => ['except' => ''],
         'dateFrom' => ['except' => null],
         'dateTo' => ['except' => null],
         'clientFilter' => ['except' => ''],
         'projectFilter' => ['except' => ''],
+        'clientTypeFilter' => ['except' => ''],
         'clientStatusFilter' => ['except' => ''],
         'projectStatusFilter' => ['except' => ''],
     ];
@@ -158,6 +176,7 @@ class Expenses extends Component
 
     public function mount()
     {
+        $this->ensureAdmin();
         $this->loadClients();
         $this->calendarMonth = now()->month;
         $this->calendarYear = now()->year;
@@ -181,13 +200,6 @@ class Expenses extends Component
             $query->whereDate('released_at', $this->filterDate);
         }
         $this->clientExpenses = $query->latest()->get();
-        History::create([
-            'user_id' => auth()->id(),
-            'action' => 'view',
-            'model' => 'client',
-            'model_id' => $clientId,
-            'changes' => ['viewed_expenses' => true, 'expense_count' => $this->clientExpenses->count()],
-        ]);
         $this->refreshCalendarEvents();
     }
 
@@ -243,17 +255,8 @@ class Expenses extends Component
             return;
         }
 
-        // Capture all client details before deletion
-        $clientDetails = [
-            'name' => $client->name,
-            'branch' => $client->branch,
-            'status' => $client->status,
-            'has_logo' => $client->hasImageBlob(),
-            'total_expenses' => $client->expenses()->sum('total_cost'),
-            'expense_count' => $client->expenses()->count(),
-            'project_count' => $client->projects()->count(),
-            'deleted' => true
-        ];
+        // Get comprehensive deletion details from the Client model
+        $clientDetails = $client->getHistoryDeletionDetails();
 
         $client->delete();
         History::create([
@@ -389,6 +392,11 @@ class Expenses extends Component
             $this->projectClientName = $defaultClient?->name ?? '';
         }
 
+        // Generate reference code for new projects
+        if (!$this->editingProject) {
+            $this->generateProjectReference();
+        }
+
         $this->showProjectModal = true;
     }
 
@@ -423,7 +431,7 @@ class Expenses extends Component
     protected function resetProjectManageState(): void
     {
         $this->managingProject = null;
-    $this->manageProjectMetrics = [];
+        $this->manageProjectMetrics = [];
         $this->manageProjectNotesInput = '';
         $this->manageProjectStatus = 'planning';
         $this->manageProjectStartDate = '';
@@ -434,6 +442,8 @@ class Expenses extends Component
         $this->manageActiveTab = 'release';
         $this->manageExpenseNotesSupported = false;
         $this->manageReleaseDuplicateNotice = '';
+        $this->editingReleaseId = null;
+        $this->editReleaseCostPerUnit = 0;
         $this->resetManageReleaseForm();
     }
 
@@ -449,6 +459,8 @@ class Expenses extends Component
         $this->manageReleaseTime = $now->format('H:i');
         $this->manageReleaseNotes = '';
         $this->manageReleaseDuplicateNotice = '';
+        $this->isReleasingMaterials = false;
+        $this->releaseProcessingMessage = '';
     }
 
     public function addManageReleaseItem(): void
@@ -474,6 +486,7 @@ class Expenses extends Component
     {
         $this->manageReleaseDuplicateNotice = '';
     }
+
 
     public function updatedManageReleaseItems($value, $key): void
     {
@@ -586,41 +599,29 @@ class Expenses extends Component
 
     public function generateProjectReference(): void
     {
-        $client = null;
+        // Get today's date in MMDDYYYY format
+        $today = now()->format('mdY'); // mdY gives MMDDYYYY
 
-        if ($this->projectClientId) {
-            $client = $this->clients instanceof Collection
-                ? $this->clients->firstWhere('id', (int) $this->projectClientId)
-                : collect($this->clients)->firstWhere('id', (int) $this->projectClientId);
-        } elseif ($this->projectClientName) {
-            $client = $this->clients instanceof Collection
-                ? $this->clients->where('name', $this->projectClientName)->first()
-                : collect($this->clients)->where('name', $this->projectClientName)->first();
-        }
+        // Find the highest sequence number for projects created today
+        $latestProject = Project::whereDate('created_at', today())
+            ->where('reference_code', 'like', $today . '-%')
+            ->orderByRaw("CAST(SUBSTRING_INDEX(reference_code, '-', -1) AS UNSIGNED) DESC")
+            ->first();
 
-        $nameSegment = 'PRJ';
-        $branchSegment = 'GEN';
-
-        if ($client) {
-            $nameSegment = (string) Str::of($client->name)
-                ->upper()
-                ->replaceMatches('/[^A-Z0-9]/', '')
-                ->substr(0, 4)
-                ->padRight(3, 'X');
-
-            if ($client->branch) {
-                $branchSegment = (string) Str::of($client->branch)
-                    ->upper()
-                    ->replaceMatches('/[^A-Z0-9]/', '')
-                    ->substr(0, 4)
-                    ->padRight(3, 'X');
+        // Extract the sequence number and increment it
+        $sequence = 1; // Default to 001
+        if ($latestProject && $latestProject->reference_code) {
+            $parts = explode('-', $latestProject->reference_code);
+            if (count($parts) >= 2) {
+                $lastSequence = (int) end($parts);
+                $sequence = $lastSequence + 1;
             }
         }
 
-        $timestamp = now()->format('ymd');
-        $sequence = random_int(100, 999);
+        // Format sequence as 3-digit number with leading zeros
+        $sequenceFormatted = str_pad($sequence, 3, '0', STR_PAD_LEFT);
 
-        $this->projectReference = sprintf('%s-%s-%s-%s', $nameSegment, $branchSegment, $timestamp, $sequence);
+        $this->projectReference = sprintf('%s-%s', $today, $sequenceFormatted);
     }
 
     public function viewProject(int $projectId): void
@@ -692,14 +693,6 @@ class Expenses extends Component
             ->values()
             ->toArray();
 
-        History::create([
-            'user_id' => auth()->id(),
-            'action' => 'view',
-            'model' => 'project',
-            'model_id' => $projectId,
-            'changes' => ['viewed_details' => true],
-        ]);
-
         $this->showProjectDetailModal = true;
     }
 
@@ -757,9 +750,26 @@ class Expenses extends Component
         $this->manageProjectWarrantyUntil = $project->warranty_until?->format('Y-m-d') ?? '';
         $this->manageExpenseNotesSupported = $this->expenseNotesEnabled();
 
-        $this->manageInventoryOptions = Inventory::orderBy('brand')
+        // Get inventory items filtered by client/project usage and availability
+        $clientId = $project->client_id;
+
+        // Get inventory IDs that have been used for this client before
+        $previouslyUsedInventoryIds = Expense::where('client_id', $clientId)
+            ->whereNotNull('inventory_id')
+            ->pluck('inventory_id')
+            ->unique()
+            ->toArray();
+
+        // Get inventory items ordered by: previously used for this client first, then by brand
+        $query = Inventory::query();
+
+        if (!empty($previouslyUsedInventoryIds)) {
+            $query->orderByRaw("FIELD(id, " . implode(',', $previouslyUsedInventoryIds) . ") DESC");
+        }
+
+        $this->manageInventoryOptions = $query->orderBy('brand')
             ->get()
-            ->map(function (Inventory $inventory) {
+            ->map(function (Inventory $inventory) use ($previouslyUsedInventoryIds) {
                 $status = $inventory->status instanceof InventoryStatus
                     ? $inventory->status->value
                     : $inventory->status;
@@ -769,6 +779,7 @@ class Expenses extends Component
                     'label' => trim(sprintf('%s — %s', $inventory->brand, $inventory->description ?? '')),
                     'quantity' => $inventory->quantity,
                     'status' => $status,
+                    'previously_used' => in_array($inventory->id, $previouslyUsedInventoryIds),
                 ];
             })
             ->toArray();
@@ -810,15 +821,11 @@ class Expenses extends Component
             return;
         }
 
-        $this->validate([
-            'manageReleaseItems' => 'required|array|min:1',
-            'manageReleaseItems.*.inventory_id' => 'required|exists:inventories,id',
-            'manageReleaseItems.*.quantity' => 'required|integer|min:1',
-            'manageReleaseItems.*.cost_per_unit' => 'required|numeric|min:0',
-            'manageReleaseDate' => 'required|date',
-            'manageReleaseTime' => 'required',
-            'manageReleaseNotes' => 'nullable|string|max:2000',
-        ]);
+        try {
+            $this->validateReleaseForm();
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return;
+        }
 
         $project = Project::with('client')->find($this->managingProject['id']);
         if (!$project) {
@@ -826,159 +833,73 @@ class Expenses extends Component
             return;
         }
 
-        $items = collect($this->manageReleaseItems)
-            ->map(fn ($item) => [
-                'inventory_id' => isset($item['inventory_id']) ? (int) $item['inventory_id'] : 0,
-                'quantity' => isset($item['quantity']) ? (int) $item['quantity'] : 0,
-                'cost_per_unit' => isset($item['cost_per_unit']) ? (float) $item['cost_per_unit'] : 0.0,
-            ])
-            ->filter(fn ($item) => $item['inventory_id'] > 0)
-            ->values();
-
+        $items = $this->normalizeReleaseItems();
         if ($items->isEmpty()) {
             $this->addError('manageReleaseItems', 'Add at least one material before saving.');
             return;
         }
 
-        $inventories = Inventory::whereIn('id', $items->pluck('inventory_id'))->get()->keyBy('id');
-        
-        DB::beginTransaction();
         try {
-            $systemAdmins = User::where('role', 'system_admin')->get();
-            
-            if ($systemAdmins->isEmpty()) {
-                \Log::warning('No system administrators found');
-                session()->flash('message', 'No system administrators available to approve your request.');
-                DB::rollBack();
-                return;
-            }
-
-            foreach ($items as $item) {
-                $inventory = $inventories->get($item['inventory_id']);
-                
-                // Create chat messages to ALL system admins (private messages)
-                $chatIds = [];
-                foreach ($systemAdmins as $admin) {
-                    try {
-                        $chat = Chat::create([
-                            'user_id' => auth()->id(),
-                            'recipient_id' => $admin->id,
-                            'message' => "📋 Material Release Request\n\nProject: {$project->reference_code}\nItem: {$inventory->brand} - {$inventory->description}\nQuantity: {$item['quantity']}\nReason: " . ($this->manageReleaseNotes ?: 'No reason provided') . "\n\nApproval ID: {$approval->id}",
-                        ]);
-                        $chatIds[] = $chat->id;
-
-                        // Broadcast the chat message
-                        event(new \App\Events\MessageSent($chat));
-                    } catch (\Exception $e) {
-                        \Log::error('Failed to create chat for admin ' . $admin->id . ': ' . $e->getMessage());
-                    }
-                }
-
-                $approval = MaterialReleaseApproval::create([
-                    'requested_by' => auth()->id(),
-                    'inventory_id' => $inventory->id,
-                    'quantity_requested' => $item['quantity'],
-                    'reason' => $this->manageReleaseNotes ?: "Material release for project {$project->reference_code}",
-                    'status' => 'pending',
-                    'chat_id' => !empty($chatIds) ? $chatIds[0] : null,
-                ]);
-
-                // Create history entry for the request
-                \App\Models\History::create([
-                    'user_id' => auth()->id(),
-                    'action' => 'Material Release Request Created',
-                    'model' => 'MaterialReleaseApproval',
-                    'model_id' => $approval->id,
-                    'changes' => json_encode([
-                        'status' => 'pending',
-                        'project' => $project->reference_code,
-                        'material' => $inventory->material_name,
-                        'quantity' => $item['quantity'],
-                        'reason' => $this->manageReleaseNotes ?: 'No reason provided',
-                        'requested_at' => now()->toDateTimeString(),
-                    ]),
-                    'old_values' => null,
-                ]);
-
-                // Broadcast history creation event
-                try {
-                    $historyEntry = \App\Models\History::where('user_id', auth()->id())
-                        ->where('model', 'MaterialReleaseApproval')
-                        ->where('model_id', $approval->id)
-                        ->latest()
-                        ->first();
-                    if ($historyEntry) {
-                        event(new \App\Events\HistoryEntryCreated($historyEntry));
-                    }
-                } catch (\Exception $e) {
-                    \Log::error('Failed to broadcast history event: ' . $e->getMessage());
-                }
-
-                try {
-                    event(new ApprovalRequestCreated($approval));
-                } catch (\Exception $e) {
-                    \Log::error('Failed to broadcast event: ' . $e->getMessage());
-                }
-
-                foreach ($systemAdmins as $admin) {
-                    try {
-                        $admin->notify(new MaterialReleaseApprovalRequest($approval));
-                    } catch (\Exception $e) {
-                        \Log::error('Failed to notify admin: ' . $e->getMessage());
-                    }
-                }
-            }
-
-            DB::commit();
-            
-            $this->resetManageReleaseForm();
-            $this->hydrateManageProject($project->id, preserveTab: true);
-            
-            session()->flash('message', '✅ Material release request sent to System Admin for approval. Materials will NOT be released until approved.');
-        } catch (\Throwable $exception) {
-            DB::rollBack();
-            \Log::error('Approval request failed: ' . $exception->getMessage());
-            $this->addError('manageReleaseItems', 'Unable to submit approval request: ' . $exception->getMessage());
+            $inventories = $this->validateInventoryAvailability($items);
+        } catch (\Exception $e) {
+            $this->addError('manageReleaseItems', $e->getMessage());
+            return;
         }
+
+        $this->processApprovalWorkflow($project, $items, $inventories);
     }
 
     public function recordProjectRelease(): void
     {
-        $user = auth()->user();
-        
-        // ABSOLUTE BLOCK: Regular users CANNOT directly release materials
-        if ($user->role === 'user') {
-            \Log::info('🚫 BLOCKED: Regular user attempting direct release - redirecting to approval workflow');
-            
-            // Redirect to approval workflow
-            $this->submitApprovalRequest();
+        // Prevent double submission
+        if ($this->isReleasingMaterials) {
             return;
         }
-        
-        // Check if user is system_admin or developer
-        $isSystemAdmin = $user->isSystemAdmin() || $user->isDeveloper();
-        
-        // Log for debugging
-        \Log::info('Material Release Attempt', [
-            'user_id' => $user->id,
-            'user_role' => $user->role,
-            'isSystemAdmin()' => $user->isSystemAdmin(),
-            'isDeveloper()' => $user->isDeveloper(),
-            'is_system_admin_combined' => $isSystemAdmin,
-            'user_name' => $user->name
-        ]);
-        
-        // FORCE CHECK: If user role is 'user', they MUST go through approval
-        if ($user->role === 'user') {
-            \Log::info('USER ROLE DETECTED - FORCING APPROVAL WORKFLOW');
-            $isSystemAdmin = false; // Force approval workflow
-        }
 
+        // Validate project and items
         if (!$this->managingProject) {
             session()->flash('message', 'Select a project before releasing materials.');
             return;
         }
 
+        try {
+            $this->validateReleaseForm();
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return;
+        }
+
+        // Load project and prepare items
+        $project = Project::with('client')->find($this->managingProject['id']);
+        if (!$project) {
+            session()->flash('message', 'Project not found.');
+            return;
+        }
+
+        $items = $this->normalizeReleaseItems();
+        if ($items->isEmpty()) {
+            $this->addError('manageReleaseItems', 'Add at least one material before saving.');
+            return;
+        }
+
+        // Validate inventory availability
+        try {
+            $inventories = $this->validateInventoryAvailability($items);
+        } catch (\Exception $e) {
+            $this->addError('manageReleaseItems', $e->getMessage());
+            return;
+        }
+
+        // Route to appropriate workflow
+        $user = auth()->user();
+        if ($user->role === 'user' || !($user->isSystemAdmin() || $user->isDeveloper())) {
+            $this->processApprovalWorkflow($project, $items, $inventories);
+        } else {
+            $this->processDirectRelease($project, $items, $inventories);
+        }
+    }
+
+    private function validateReleaseForm(): void
+    {
         $this->validate([
             'manageReleaseItems' => 'required|array|min:1',
             'manageReleaseItems.*.inventory_id' => 'required|exists:inventories,id',
@@ -994,237 +915,273 @@ class Expenses extends Component
             'manageReleaseDate' => 'release date',
             'manageReleaseTime' => 'release time',
         ]);
+    }
 
-        $project = Project::with('client')->find($this->managingProject['id']);
-        if (!$project) {
-            session()->flash('message', 'Project not found.');
-            return;
-        }
-
-        $items = collect($this->manageReleaseItems)
+    private function normalizeReleaseItems(): Collection
+    {
+        return collect($this->manageReleaseItems)
             ->map(fn ($item) => [
-                'inventory_id' => isset($item['inventory_id']) ? (int) $item['inventory_id'] : 0,
-                'quantity' => isset($item['quantity']) ? (int) $item['quantity'] : 0,
-                'cost_per_unit' => isset($item['cost_per_unit']) ? (float) $item['cost_per_unit'] : 0.0,
+                'inventory_id' => (int) ($item['inventory_id'] ?? 0),
+                'quantity' => (int) ($item['quantity'] ?? 0),
+                'cost_per_unit' => (float) ($item['cost_per_unit'] ?? 0.0),
             ])
             ->filter(fn ($item) => $item['inventory_id'] > 0)
             ->values();
+    }
 
-        if ($items->isEmpty()) {
-            $this->addError('manageReleaseItems', 'Add at least one material before saving.');
-            return;
-        }
+    private function validateInventoryAvailability(Collection $items): Collection
+    {
+        $inventories = Inventory::whereIn('id', $items->pluck('inventory_id'))
+            ->get()
+            ->keyBy('id');
 
-        $inventories = Inventory::whereIn('id', $items->pluck('inventory_id'))->get()->keyBy('id');
         $requestedTotals = [];
 
         foreach ($items as $index => $item) {
             $inventory = $inventories->get($item['inventory_id']);
             if (!$inventory) {
-                $this->addError('manageReleaseItems.' . $index . '.inventory_id', 'Selected inventory item not found.');
-                return;
+                throw new \Exception('Selected inventory item not found.');
             }
 
-            $requestedTotals[$inventory->id] = ($requestedTotals[$inventory->id] ?? 0) + $item['quantity'];
+            $requested = ($requestedTotals[$inventory->id] ?? 0) + $item['quantity'];
+            $requestedTotals[$inventory->id] = $requested;
 
-            if ($requestedTotals[$inventory->id] > $inventory->quantity) {
-                $this->addError('manageReleaseItems.' . $index . '.quantity', 'Quantity exceeds available stock (' . $inventory->quantity . ').');
-                return;
+            if ($requested > $inventory->quantity) {
+                throw new \Exception(
+                    "Insufficient stock for {$inventory->brand}. Available: {$inventory->quantity}, Requested: {$requested}"
+                );
             }
         }
 
-        // If user role, create approval requests instead of releasing directly
-        if (!$isSystemAdmin) {
-            \Log::info('Regular user submitting material release - creating approval request');
+        return $inventories;
+    }
+
+    private function processApprovalWorkflow(Project $project, Collection $items, Collection $inventories): void
+    {
+        $this->isReleasingMaterials = true;
+        $this->releaseProcessingMessage = 'Submitting approval request...';
+        
+        DB::beginTransaction();
+        try {
+            $systemAdmins = User::where('role', 'system_admin')->get();
             
-            DB::beginTransaction();
-            try {
-                // Get all system admins
-                $systemAdmins = User::where('role', 'system_admin')->get();
-                
-                if ($systemAdmins->isEmpty()) {
-                    \Log::warning('No system administrators found');
-                    session()->flash('message', 'No system administrators available to approve your request.');
-                    DB::rollBack();
-                    return;
-                }
-
-                \Log::info('Found ' . $systemAdmins->count() . ' system admins');
-
-                // Create approval requests for each item
-                 foreach ($items as $item) {
-                     $inventory = $inventories->get($item['inventory_id']);
-
-                     // Create approval request first
-                     $approval = MaterialReleaseApproval::create([
-                         'requested_by' => auth()->id(),
-                         'inventory_id' => $inventory->id,
-                         'quantity_requested' => $item['quantity'],
-                         'reason' => $this->manageReleaseNotes ?: "Material release for project {$project->reference_code}",
-                         'status' => 'pending',
-                         'chat_id' => null, // Will be set after creating chats
-                     ]);
-
-                     \Log::info('Approval request created with ID: ' . $approval->id);
-
-                     // Create chat messages to ALL system admins
-                     $chatIds = [];
-                     foreach ($systemAdmins as $admin) {
-                         try {
-                             $chat = Chat::create([
-                                 'user_id' => auth()->id(),
-                                 'recipient_id' => $admin->id,
-                                 'message' => "📋 Material Release Request\n\nProject: {$project->reference_code}\nItem: {$inventory->brand} - {$inventory->description}\nQuantity: {$item['quantity']}\nReason: " . ($this->manageReleaseNotes ?: 'No reason provided') . "\n\nApproval ID: {$approval->id}",
-                             ]);
-
-                             $chatIds[] = $chat->id;
-                             \Log::info('Chat created with ID: ' . $chat->id . ' for admin: ' . $admin->id);
-
-                             // Broadcast the chat message
-                             try {
-                                 event(new \App\Events\MessageSent($chat));
-                             } catch (\Exception $e) {
-                                 \Log::error('Failed to broadcast chat message: ' . $e->getMessage());
-                             }
-                         } catch (\Exception $e) {
-                             \Log::error('Failed to create chat for admin ' . $admin->id . ': ' . $e->getMessage());
-                         }
-                     }
-
-                     // Update approval with first chat ID (for reference)
-                     if (!empty($chatIds)) {
-                         $approval->update(['chat_id' => $chatIds[0]]);
-                     }
-
-                     // Try to broadcast event (don't fail if Pusher is down)
-                     try {
-                         event(new ApprovalRequestCreated($approval));
-                     } catch (\Exception $e) {
-                         \Log::error('Failed to broadcast event: ' . $e->getMessage());
-                     }
-
-                     // Notification removed - using message boxes instead
-                 }
-
-                DB::commit();
-                
-                \Log::info('Approval request submitted successfully');
-                
-                $this->resetManageReleaseForm();
-                $this->hydrateManageProject($project->id, preserveTab: true);
-                
-                session()->flash('message', '✅ Material release request sent to System Admin for approval. Please wait for approval before materials are released.');
-                return;
-            } catch (\Throwable $exception) {
+            if ($systemAdmins->isEmpty()) {
                 DB::rollBack();
-                \Log::error('Approval request failed: ' . $exception->getMessage());
-                \Log::error('Stack trace: ' . $exception->getTraceAsString());
-                $this->addError('manageReleaseItems', 'Unable to submit approval request: ' . $exception->getMessage());
+                $this->isReleasingMaterials = false;
+                $this->releaseProcessingMessage = '';
+                session()->flash('message', 'No system administrators available to approve your request.');
                 return;
+            }
+
+            $itemCount = 0;
+            foreach ($items as $item) {
+                $itemCount++;
+                $this->releaseProcessingMessage = "Processing item $itemCount of {$items->count()}...";
+                
+                $inventory = $inventories->get($item['inventory_id']);
+                
+                $approval = MaterialReleaseApproval::create([
+                    'requested_by' => auth()->id(),
+                    'inventory_id' => $inventory->id,
+                    'quantity_requested' => $item['quantity'],
+                    'reason' => $this->manageReleaseNotes ?: "Material release for project {$project->reference_code}",
+                    'status' => 'pending',
+                ]);
+
+                $this->notifyAdminsOfApprovalRequest($approval, $project, $inventory, $item, $systemAdmins);
+                
+                History::create([
+                    'user_id' => auth()->id(),
+                    'action' => 'Material Release Request Created',
+                    'model' => 'MaterialReleaseApproval',
+                    'model_id' => $approval->id,
+                    'changes' => json_encode([
+                        'status' => 'pending',
+                        'project' => $project->reference_code,
+                        'material' => $inventory->material_name,
+                        'quantity' => $item['quantity'],
+                        'cost_per_unit' => $item['cost_per_unit'],
+                        'reason' => $this->manageReleaseNotes,
+                        'requested_at' => now()->toDateTimeString(),
+                    ]),
+                ]);
+            }
+
+            DB::commit();
+            
+            $this->isReleasingMaterials = false;
+            $this->releaseProcessingMessage = '';
+            $this->resetManageReleaseForm();
+            $this->hydrateManageProject($project->id, preserveTab: true);
+            
+            session()->flash('message', '✅ Material release request sent for approval. Please wait for admin approval.');
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            $this->isReleasingMaterials = false;
+            $this->releaseProcessingMessage = '';
+            \Log::error('Approval workflow failed', ['error' => $e->getMessage()]);
+            $this->addError('manageReleaseItems', 'Unable to submit approval request.');
+        }
+    }
+
+    private function notifyAdminsOfApprovalRequest(
+        MaterialReleaseApproval $approval,
+        Project $project,
+        Inventory $inventory,
+        array $item,
+        Collection $systemAdmins
+    ): void {
+        foreach ($systemAdmins as $admin) {
+            try {
+                $message = $this->buildApprovalRequestMessage($approval, $project, $inventory, $item);
+                $chat = Chat::create([
+                    'user_id' => auth()->id(),
+                    'recipient_id' => $admin->id,
+                    'message' => $message,
+                ]);
+
+                event(new \App\Events\MessageSent($chat));
+                
+                if ($approval->chat_id === null) {
+                    $approval->update(['chat_id' => $chat->id]);
+                }
+            } catch (\Exception $e) {
+                \Log::warning("Failed to notify admin {$admin->id}", ['error' => $e->getMessage()]);
             }
         }
 
-        \Log::info('System admin releasing materials directly');
+        try {
+            event(new ApprovalRequestCreated($approval));
+        } catch (\Exception $e) {
+            \Log::warning('Failed to broadcast approval event', ['error' => $e->getMessage()]);
+        }
+    }
 
-        // System Admin: Direct release (original logic)
+    private function buildApprovalRequestMessage(
+        MaterialReleaseApproval $approval,
+        Project $project,
+        Inventory $inventory,
+        array $item
+    ): string {
+        return "📋 Material Release Request\n\n"
+            . "Project: {$project->reference_code}\n"
+            . "Item: {$inventory->brand} - {$inventory->description}\n"
+            . "Quantity: {$item['quantity']}\n"
+            . "Reason: " . ($this->manageReleaseNotes ?: 'No reason provided') . "\n\n"
+            . "Approval ID: {$approval->id}";
+    }
+
+    private function processDirectRelease(Project $project, Collection $items, Collection $inventories): void
+    {
+        $this->isReleasingMaterials = true;
+        $this->releaseProcessingMessage = 'Processing material release...';
+        
         $releasedAt = Carbon::parse(
             $this->manageReleaseDate . ' ' . $this->manageReleaseTime,
             'Asia/Manila'
         )->setTimezone('UTC');
 
         DB::beginTransaction();
-
         try {
-            foreach ($items as $index => $item) {
+            $itemCount = 0;
+            foreach ($items as $item) {
+                $itemCount++;
+                $this->releaseProcessingMessage = "Releasing item $itemCount of {$items->count()}...";
+                
                 $inventory = $inventories->get($item['inventory_id']);
-                if (!$inventory) {
-                    throw new \RuntimeException('Inventory not found during release.');
-                }
-
-                $totalCost = round($item['quantity'] * $item['cost_per_unit'], 2);
-
-                $expense = Expense::create([
-                    'client_id' => $project->client_id,
-                    'inventory_id' => $inventory->id,
-                    'project_id' => $project->id,
-                    'quantity_used' => $item['quantity'],
-                    'cost_per_unit' => $item['cost_per_unit'],
-                    'total_cost' => $totalCost,
-                    'released_at' => $releasedAt,
-                ]);
-
-                if ($this->manageReleaseNotes && $this->expenseNotesEnabled()) {
-                    $expense->notes = $this->manageReleaseNotes;
-                    $expense->save();
-                }
-
-                $newQuantity = max(0, $inventory->quantity - $item['quantity']);
-                $newStatus = $newQuantity <= 0
-                    ? InventoryStatus::OUT_OF_STOCK
-                    : ($newQuantity <= $inventory->min_stock_level
-                        ? InventoryStatus::CRITICAL
-                        : InventoryStatus::NORMAL);
-
-                // Capture old values before update
-                $oldInventoryValues = [
-                    'quantity' => $inventory->quantity,
-                    'status' => $inventory->status,
-                ];
-
-                $inventory->update([
-                    'quantity' => $newQuantity,
-                    'status' => $newStatus->value,
-                ]);
-
-                // Update in-memory snapshot for subsequent iterations when same inventory repeats.
-                $inventory->quantity = $newQuantity;
-                $inventory->status = $newStatus->value;
-
-                History::create([
-                    'user_id' => auth()->id(),
-                    'action' => 'create',
-                    'model' => 'expense',
-                    'model_id' => $expense->id,
-                    'changes' => array_filter([
-                        'client_id' => $expense->client_id,
-                        'inventory_id' => $expense->inventory_id,
-                        'project_id' => $expense->project_id,
-                        'quantity_used' => $expense->quantity_used,
-                        'cost_per_unit' => $expense->cost_per_unit,
-                        'total_cost' => $expense->total_cost,
-                        'notes' => $this->manageReleaseNotes ? $this->manageReleaseNotes : null,
-                    ], fn ($value) => $value !== null),
-                ]);
-
-                History::create([
-                    'user_id' => auth()->id(),
-                    'action' => 'update',
-                    'model' => 'inventory',
-                    'model_id' => $inventory->id,
-                    'old_values' => $oldInventoryValues,
-                    'changes' => [
-                        'quantity' => $newQuantity,
-                        'status' => $newStatus->value,
-                    ],
-                ]);
+                $this->releaseInventoryItem($project, $inventory, $item, $releasedAt);
             }
 
             DB::commit();
 
+            $this->isReleasingMaterials = false;
+            $this->releaseProcessingMessage = '';
             $this->resetManageReleaseForm();
             $this->hydrateManageProject($project->id, preserveTab: true);
             $this->loadClients();
 
-            if ($this->selectedClient && $this->selectedClient->id === $project->client_id) {
+            if ($this->selectedClient?->id === $project->client_id) {
                 $this->viewExpenses($project->client_id);
             }
 
-            session()->flash('message', $items->count() . ' material release(s) recorded and inventory updated successfully.');
-        } catch (\Throwable $exception) {
+            session()->flash('message', $items->count() . ' material(s) released and inventory updated.');
+        } catch (\Throwable $e) {
             DB::rollBack();
-            \Log::error('Project release failed: ' . $exception->getMessage());
+            $this->isReleasingMaterials = false;
+            $this->releaseProcessingMessage = '';
+            \Log::error('Direct release failed', ['error' => $e->getMessage()]);
             $this->addError('manageReleaseItems', 'Unable to record releases at this time.');
         }
+    }
+
+    private function releaseInventoryItem(
+        Project $project,
+        Inventory $inventory,
+        array $item,
+        Carbon $releasedAt
+    ): void {
+        $totalCost = round($item['quantity'] * $item['cost_per_unit'], 2);
+
+        $expense = Expense::create([
+            'client_id' => $project->client_id,
+            'inventory_id' => $inventory->id,
+            'project_id' => $project->id,
+            'quantity_used' => $item['quantity'],
+            'cost_per_unit' => $item['cost_per_unit'],
+            'total_cost' => $totalCost,
+            'released_at' => $releasedAt,
+            'notes' => $this->manageReleaseNotes && $this->expenseNotesEnabled() ? $this->manageReleaseNotes : null,
+        ]);
+
+        $oldInventoryValues = [
+            'quantity' => $inventory->quantity,
+            'status' => $inventory->status,
+        ];
+
+        $newQuantity = max(0, $inventory->quantity - $item['quantity']);
+        $newStatus = $this->determineInventoryStatus($newQuantity, $inventory->min_stock_level);
+
+        $inventory->update([
+            'quantity' => $newQuantity,
+            'status' => $newStatus->value,
+        ]);
+
+        History::create([
+            'user_id' => auth()->id(),
+            'action' => 'create',
+            'model' => 'expense',
+            'model_id' => $expense->id,
+            'changes' => array_filter([
+                'client_id' => $expense->client_id,
+                'inventory_id' => $expense->inventory_id,
+                'project_id' => $expense->project_id,
+                'quantity_used' => $expense->quantity_used,
+                'cost_per_unit' => $expense->cost_per_unit,
+                'total_cost' => $expense->total_cost,
+                'notes' => $expense->notes,
+            ], fn ($value) => $value !== null),
+        ]);
+
+        History::create([
+            'user_id' => auth()->id(),
+            'action' => 'update',
+            'model' => 'inventory',
+            'model_id' => $inventory->id,
+            'old_values' => $oldInventoryValues,
+            'changes' => [
+                'quantity' => $newQuantity,
+                'status' => $newStatus->value,
+            ],
+        ]);
+    }
+
+    private function determineInventoryStatus(int $quantity, int $minStockLevel): InventoryStatus
+    {
+        return match (true) {
+            $quantity <= 0 => InventoryStatus::OUT_OF_STOCK,
+            $quantity <= $minStockLevel => InventoryStatus::CRITICAL,
+            default => InventoryStatus::NORMAL,
+        };
     }
 
     public function updateManageProjectDetails(): void
@@ -1250,26 +1207,49 @@ class Expenses extends Component
             return;
         }
 
-        $project->update([
+        // Capture old values before update
+        $oldValues = [
+            'status' => $project->status,
+            'start_date' => $project->start_date?->format('Y-m-d'),
+            'target_date' => $project->target_date?->format('Y-m-d'),
+            'warranty_until' => $project->warranty_until?->format('Y-m-d'),
+            'notes' => $project->notes,
+        ];
+
+        // Prepare new values
+        $newValues = [
             'status' => $this->manageProjectStatus,
             'start_date' => $this->manageProjectStartDate ?: null,
             'target_date' => $this->manageProjectTargetDate ?: null,
             'warranty_until' => $this->manageProjectWarrantyUntil ?: null,
             'notes' => $this->manageProjectNotesInput ?: null,
-        ]);
+        ];
+
+        // Check for actual changes
+        $changes = [];
+        foreach ($newValues as $field => $newValue) {
+            if ($oldValues[$field] != $newValue) {
+                $changes[$field] = $newValue;
+            }
+        }
+
+        // Only proceed if there are actual changes
+        if (empty($changes)) {
+            $message = 'No changes detected. Project details remain unchanged.';
+            session()->flash('message', $message);
+            $this->dispatch('showNotification', $message, 'info', 4000);
+            return;
+        }
+
+        $project->update($newValues);
 
         History::create([
             'user_id' => auth()->id(),
             'action' => 'update',
             'model' => 'project',
             'model_id' => $project->id,
-            'changes' => [
-                'status' => $this->manageProjectStatus,
-                'start_date' => $this->manageProjectStartDate ?: null,
-                'target_date' => $this->manageProjectTargetDate ?: null,
-                'warranty_until' => $this->manageProjectWarrantyUntil ?: null,
-                'notes' => $this->manageProjectNotesInput ?: null,
-            ],
+            'old_values' => $oldValues,
+            'changes' => $changes, // Only actual changes
         ]);
 
         $this->hydrateManageProject($project->id, preserveTab: true);
@@ -1279,7 +1259,26 @@ class Expenses extends Component
             $this->viewExpenses($project->client_id);
         }
 
-        session()->flash('message', 'Project details updated successfully.');
+        $changeCount = count($changes);
+        $changedFields = array_keys($changes);
+        $fieldsText = implode(', ', array_map(function($field) {
+            return ucwords(str_replace('_', ' ', $field));
+        }, $changedFields));
+
+        // Build detailed changes text
+        $changesDetails = [];
+        foreach ($changes as $field => $newValue) {
+            $oldValue = $oldValues[$field] ?? 'N/A';
+            $fieldName = ucwords(str_replace('_', ' ', $field));
+            $changesDetails[] = "{$fieldName}: {$oldValue} → {$newValue}";
+        }
+        $changesText = implode(', ', $changesDetails);
+
+        $message = "Project '{$this->managingProject['name']}' updated successfully! ({$changeCount} field" . ($changeCount > 1 ? 's' : '') . " updated: {$changesText})";
+
+        // Show both session flash and toast notification
+        session()->flash('message', $message);
+        $this->dispatch('showNotification', $message, 'success', 5000);
     }
 
     public function loadProjectNotes(): void
@@ -1464,6 +1463,57 @@ class Expenses extends Component
         return static::$expenseNotesSupported = Schema::hasColumn('expenses', 'notes');
     }
 
+    public function isReleaseFormDisabled(): bool
+    {
+        return $this->isReleasingMaterials;
+    }
+
+    public function isSearchDisabled(): bool
+    {
+        return false; // Search is NEVER disabled
+    }
+
+    public function isReleaseFieldDisabled(string $fieldName = ''): bool
+    {
+        // Only disable if actively releasing AND it's a release form field
+        if (!$this->isReleasingMaterials) {
+            return false;
+        }
+
+        // These fields belong to the release form
+        $releaseFormFields = [
+            'manageReleaseItems',
+            'manageReleaseDate',
+            'manageReleaseTime',
+            'manageReleaseNotes',
+        ];
+
+        return in_array($fieldName, $releaseFormFields);
+    }
+
+    public function getFilteredManageInventoryOptions(): array
+    {
+        // Use the material search term for the improved selection interface
+        $searchTerm = $this->manageReleaseMaterialSearch;
+        
+        // If no search term, return all options
+        if (empty($searchTerm)) {
+            return $this->manageInventoryOptions;
+        }
+
+        $searchTermLower = strtolower($searchTerm);
+
+        return array_filter($this->manageInventoryOptions, function ($option) use ($searchTermLower) {
+            $label = strtolower($option['label'] ?? '');
+            $brand = strtolower($option['brand'] ?? '');
+            $description = strtolower($option['description'] ?? '');
+            
+            return str_contains($label, $searchTermLower) 
+                || str_contains($brand, $searchTermLower)
+                || str_contains($description, $searchTermLower);
+        });
+    }
+
     protected function refreshCalendarEvents(): void
     {
         if (!$this->selectedClient) {
@@ -1498,10 +1548,15 @@ class Expenses extends Component
     {
         $this->ensureAdmin();
 
+        // Auto-generate reference code if not provided
+        if (empty($this->projectReference)) {
+            $this->generateProjectReference();
+        }
+
         $validated = $this->validate([
             'projectClientId' => 'required|exists:clients,id',
             'projectName' => 'required|string|max:255',
-            'projectReference' => 'nullable|string|max:100',
+            'projectReference' => 'required|string|max:100',
             'projectJobType' => 'required|in:installation,service',
             'projectStatus' => 'required|in:' . implode(',', Project::STATUSES),
             'projectStartDate' => 'nullable|date',
@@ -1510,19 +1565,15 @@ class Expenses extends Component
             'projectNotes' => 'nullable|string|max:2000',
         ]);
 
-        $startDate = $this->projectStartDate ?: null;
-        $targetDate = $this->projectTargetDate ?: null;
-        $warrantyUntil = $this->projectWarrantyUntil ?: null;
-
-        $data = [
+        $projectData = [
             'client_id' => (int) $validated['projectClientId'],
             'name' => $validated['projectName'],
             'reference_code' => $this->projectReference ?: null,
             'job_type' => $validated['projectJobType'],
             'status' => $validated['projectStatus'],
-            'start_date' => $startDate,
-            'target_date' => $targetDate,
-            'warranty_until' => $warrantyUntil,
+            'start_date' => $this->projectStartDate ?: null,
+            'target_date' => $this->projectTargetDate ?: null,
+            'warranty_until' => $this->projectWarrantyUntil ?: null,
             'notes' => $this->projectNotes ?: null,
         ];
 
@@ -1533,10 +1584,53 @@ class Expenses extends Component
                 return;
             }
 
-            $project->update($data);
-            $message = 'Project updated successfully.';
+            // Capture old values before update
+            $oldValues = [
+                'client_id' => $project->client_id,
+                'name' => $project->name,
+                'reference_code' => $project->reference_code,
+                'job_type' => $project->job_type,
+                'status' => $project->status,
+                'start_date' => $project->start_date?->format('Y-m-d'),
+                'target_date' => $project->target_date?->format('Y-m-d'),
+                'warranty_until' => $project->warranty_until?->format('Y-m-d'),
+                'notes' => $project->notes,
+            ];
+
+            // Check for actual changes
+            $changes = [];
+            foreach ($projectData as $field => $newValue) {
+                if ($oldValues[$field] != $newValue) {
+                    $changes[$field] = $newValue;
+                }
+            }
+
+            // Only proceed if there are actual changes
+            if (empty($changes)) {
+                session()->flash('message', 'No changes detected. Project details remain unchanged.');
+                $this->closeProjectModal();
+                return;
+            }
+
+            $project->update($projectData);
+            $changeCount = count($changes);
+            $changedFields = array_keys($changes);
+            $fieldsText = implode(', ', array_map(function($field) {
+                return ucwords(str_replace('_', ' ', $field));
+            }, $changedFields));
+
+            // Build detailed changes text
+            $changesDetails = [];
+            foreach ($changes as $field => $newValue) {
+                $oldValue = $oldValues[$field] ?? 'N/A';
+                $fieldName = ucwords(str_replace('_', ' ', $field));
+                $changesDetails[] = "{$fieldName}: {$oldValue} → {$newValue}";
+            }
+            $changesText = implode(', ', $changesDetails);
+
+            $message = "Changes made successfully! ({$changeCount} field" . ($changeCount > 1 ? 's' : '') . " updated: {$changesText})";
         } else {
-            $project = Project::create($data);
+            $project = Project::create($projectData);
             $message = 'Project created successfully.';
         }
 
@@ -1545,24 +1639,19 @@ class Expenses extends Component
             'action' => $this->editingProject ? 'update' : 'create',
             'model' => 'project',
             'model_id' => $project->id,
-            'changes' => [
-                'client_id' => $data['client_id'],
-                'name' => $data['name'],
-                'reference_code' => $data['reference_code'],
-                'job_type' => $data['job_type'],
-                'status' => $data['status'],
-                'start_date' => $startDate,
-                'target_date' => $targetDate,
-                'warranty_until' => $warrantyUntil,
-            ],
+            'old_values' => $this->editingProject ? $oldValues : null,
+            'changes' => $projectData,
         ]);
 
         $this->loadClients();
-        if ($this->selectedClient && $this->selectedClient->id === $project->client_id) {
+        if ($this->selectedClient?->id === $project->client_id) {
             $this->viewExpenses($project->client_id);
         }
         $this->closeProjectModal();
+
+        // Show both session flash and toast notification
         session()->flash('message', $message);
+        $this->dispatch('showNotification', $message, 'success', 5000);
     }
 
 
@@ -1579,9 +1668,7 @@ class Expenses extends Component
     {
         $this->ensureAdmin();
 
-        $this->validate([
-            'editCostPerUnit' => 'required|numeric|min:0',
-        ]);
+        $this->validate(['editCostPerUnit' => 'required|numeric|min:0']);
 
         $expense = Expense::find($this->editingExpenseId);
         if (!$expense) {
@@ -1589,19 +1676,27 @@ class Expenses extends Component
             return;
         }
 
-        $oldCost = $expense->cost_per_unit;
-        $expense->cost_per_unit = $this->editCostPerUnit;
-        $expense->total_cost = round($expense->quantity_used * $this->editCostPerUnit, 2);
-        $expense->save();
+        $oldValues = [
+            'cost_per_unit' => $expense->cost_per_unit,
+            'total_cost' => $expense->total_cost,
+        ];
+
+        $newTotalCost = round($expense->quantity_used * $this->editCostPerUnit, 2);
+
+        $expense->update([
+            'cost_per_unit' => $this->editCostPerUnit,
+            'total_cost' => $newTotalCost,
+        ]);
 
         History::create([
             'user_id' => auth()->id(),
             'action' => 'update',
             'model' => 'expense',
             'model_id' => $expense->id,
+            'old_values' => $oldValues,
             'changes' => [
                 'cost_per_unit' => $this->editCostPerUnit,
-                'total_cost' => $expense->total_cost,
+                // total_cost is calculated, don't include in changes
             ],
         ]);
 
@@ -1619,6 +1714,72 @@ class Expenses extends Component
         $this->editCostPerUnit = 0;
     }
 
+    public function editReleaseCost($releaseId)
+    {
+        $this->editingReleaseId = $releaseId;
+        // Find the release and set the current cost per unit
+        foreach ($this->manageRecentReleases as $release) {
+            if ($release['id'] == $releaseId) {
+                $this->editReleaseCostPerUnit = $release['cost_per_unit'];
+                break;
+            }
+        }
+    }
+
+    public function saveEditRelease()
+    {
+        $this->ensureAdmin();
+
+        // Clean the input value by removing commas
+        $this->editReleaseCostPerUnit = str_replace(',', '', $this->editReleaseCostPerUnit);
+
+        $this->validate(['editReleaseCostPerUnit' => 'required|numeric|min:0']);
+
+        $expense = Expense::find($this->editingReleaseId);
+        if (!$expense) {
+            session()->flash('message', 'Expense not found.');
+            return;
+        }
+
+        $oldValues = [
+            'cost_per_unit' => $expense->cost_per_unit,
+            'total_cost' => $expense->total_cost,
+        ];
+
+        $newTotalCost = round($expense->quantity_used * $this->editReleaseCostPerUnit, 2);
+
+        $expense->update([
+            'cost_per_unit' => $this->editReleaseCostPerUnit,
+            'total_cost' => $newTotalCost,
+        ]);
+
+        History::create([
+            'user_id' => auth()->id(),
+            'action' => 'update',
+            'model' => 'expense',
+            'model_id' => $expense->id,
+            'old_values' => $oldValues,
+            'changes' => [
+                'cost_per_unit' => $this->editReleaseCostPerUnit,
+                // total_cost is calculated, don't include in changes
+            ],
+        ]);
+
+        $this->hydrateManageProject($expense->project_id, preserveTab: true);
+        $this->loadClients();
+        if ($this->selectedClient) {
+            $this->viewExpenses($this->selectedClient->id);
+        }
+        $this->cancelEditRelease();
+        session()->flash('message', 'Release cost updated successfully.');
+    }
+
+    public function cancelEditRelease()
+    {
+        $this->editingReleaseId = null;
+        $this->editReleaseCostPerUnit = 0;
+    }
+
     public function clearFilters(): void
     {
         $this->search = '';
@@ -1626,6 +1787,7 @@ class Expenses extends Component
         $this->dateTo = null;
         $this->clientFilter = '';
         $this->projectFilter = '';
+        $this->clientTypeFilter = '';
         $this->clientStatusFilter = '';
         $this->projectStatusFilter = '';
     }
@@ -1678,22 +1840,14 @@ class Expenses extends Component
         }
     }
 
-    public function changeMonth($direction)
+    public function changeMonth($direction): void
     {
-        if ($direction === 'prev') {
-            $this->calendarMonth--;
-            if ($this->calendarMonth < 1) {
-                $this->calendarMonth = 12;
-                $this->calendarYear--;
-            }
-        } elseif ($direction === 'next') {
-            $this->calendarMonth++;
-            if ($this->calendarMonth > 12) {
-                $this->calendarMonth = 1;
-                $this->calendarYear++;
-            }
-        }
-        // Update selected indices
+        match ($direction) {
+            'prev' => $this->moveToPreviousMonth(),
+            'next' => $this->moveToNextMonth(),
+            default => null,
+        };
+
         $this->monthSelected = $this->calendarMonth - 1;
         $this->yearSelected = array_search($this->calendarYear, $this->yearItems);
 
@@ -1702,23 +1856,31 @@ class Expenses extends Component
         }
     }
 
-    public function updatedCalendarMonth()
+    private function moveToPreviousMonth(): void
     {
-        // Optional: refresh if needed
+        $this->calendarMonth--;
+        if ($this->calendarMonth < 1) {
+            $this->calendarMonth = 12;
+            $this->calendarYear--;
+        }
     }
 
-    public function updatedCalendarYear()
+    private function moveToNextMonth(): void
     {
-        // Optional: refresh if needed
+        $this->calendarMonth++;
+        if ($this->calendarMonth > 12) {
+            $this->calendarMonth = 1;
+            $this->calendarYear++;
+        }
     }
 
-    public function toggleMonth()
+    public function toggleMonth(): void
     {
         $this->monthOpen = !$this->monthOpen;
         $this->yearOpen = false;
     }
 
-    public function selectMonth($index)
+    public function selectMonth(int $index): void
     {
         $this->monthSelected = $index;
         $this->calendarMonth = $index + 1;
@@ -1729,13 +1891,13 @@ class Expenses extends Component
         }
     }
 
-    public function toggleYear()
+    public function toggleYear(): void
     {
         $this->yearOpen = !$this->yearOpen;
         $this->monthOpen = false;
     }
 
-    public function selectYear($index)
+    public function selectYear(int $index): void
     {
         $this->yearSelected = $index;
         $this->calendarYear = $this->yearItems[$index];
@@ -1746,14 +1908,14 @@ class Expenses extends Component
         }
     }
 
-    public function toggleTheme()
+    public function toggleTheme(): void
     {
         $this->themeOpen = !$this->themeOpen;
         $this->monthOpen = false;
         $this->yearOpen = false;
     }
 
-    public function selectTheme($theme)
+    public function selectTheme(string $theme): void
     {
         $this->calendarTheme = $theme;
         $this->themeOpen = false;
@@ -1779,6 +1941,7 @@ class Expenses extends Component
             $this->clientId = $clientId;
             $this->clientName = $client->name;
             $this->clientBranch = $client->branch;
+            $this->clientType = $client->client_type ?? 'non_banking';
         }
 
         $this->showClientModal = true;
@@ -1790,6 +1953,7 @@ class Expenses extends Component
         $this->clientId = null;
         $this->clientName = '';
         $this->clientBranch = '';
+        $this->clientType = 'non_banking';
         $this->clientLogo = null;
     }
 
@@ -1800,7 +1964,8 @@ class Expenses extends Component
         $this->validate([
             'clientName' => 'required|string|max:255',
             'clientBranch' => 'required|string|max:255',
-            'clientLogo' => 'nullable|image|max:2048', // 2MB max
+            'clientType' => 'required|in:banking,non_banking',
+            'clientLogo' => 'nullable|image|max:1024',
         ]);
 
         if ($this->editingClient) {
@@ -1809,38 +1974,65 @@ class Expenses extends Component
                 session()->flash('message', 'Client not found.');
                 return;
             }
-            $client->update([
+
+            $oldValues = ['name' => $client->name, 'branch' => $client->branch, 'client_type' => $client->client_type];
+
+            // Prepare new values
+            $newValues = [
                 'name' => $this->clientName,
                 'branch' => $this->clientBranch,
-            ]);
+                'client_type' => $this->clientType,
+            ];
 
-            // Handle logo upload
+            $client->update($newValues);
+
             if ($this->clientLogo) {
-                $client->storeImageAsBlob($this->clientLogo->path());
+                if (!$client->storeImageAsBlob($this->clientLogo->path())) {
+                    session()->flash('message', 'Client updated successfully, but logo upload failed.');
+                }
             }
 
+            // Get detailed change information using the Client model's method
+            $changeDetails = $client->getHistoryChangeDetails($oldValues, $newValues);
+
+            // Check if logo is being uploaded and add to change details
+            $logoUpdated = (bool) $this->clientLogo;
+            if ($logoUpdated) {
+                $changeDetails['logo'] = [
+                    'old' => $client->hasImageBlob() ? 'Has logo' : 'No logo',
+                    'new' => 'Logo updated',
+                    'field_name' => 'Logo',
+                ];
+            }
+
+            // Only proceed if there are actual changes
+            if (empty($changeDetails)) {
+                $this->closeModal();
+                return;
+            }
+
+            // Log history with detailed change information
             History::create([
                 'user_id' => auth()->id(),
                 'action' => 'update',
                 'model' => 'client',
                 'model_id' => $client->id,
-                'changes' => [
-                    'name' => $this->clientName,
-                    'branch' => $this->clientBranch,
-                    'logo_updated' => $this->clientLogo ? true : false,
-                ],
+                'old_values' => $oldValues,
+                'changes' => $changeDetails, // Use detailed change information from model
             ]);
             $message = 'Client updated successfully.';
         } else {
             $client = Client::create([
                 'name' => $this->clientName,
                 'branch' => $this->clientBranch,
+                'client_type' => $this->clientType,
                 'status' => 'in_progress',
             ]);
 
-            // Handle logo upload for new client
             if ($this->clientLogo) {
-                $client->storeImageAsBlob($this->clientLogo->path());
+                if (!$client->storeImageAsBlob($this->clientLogo->path())) {
+                    session()->flash('message', 'Client created successfully, but logo upload failed.');
+                }
             }
 
             History::create([
@@ -1851,8 +2043,9 @@ class Expenses extends Component
                 'changes' => [
                     'name' => $this->clientName,
                     'branch' => $this->clientBranch,
+                    'client_type' => $this->clientType,
                     'status' => 'in_progress',
-                    'logo_uploaded' => $this->clientLogo ? true : false,
+                    'logo_uploaded' => (bool) $this->clientLogo,
                 ],
             ]);
             $message = 'Client created successfully.';
@@ -1873,13 +2066,16 @@ class Expenses extends Component
             return;
         }
 
+        // Get comprehensive deletion details from the Client model
+        $clientDetails = $client->getHistoryDeletionDetails();
+
         $client->delete();
         History::create([
             'user_id' => auth()->id(),
             'action' => 'delete',
             'model' => 'client',
             'model_id' => $clientId,
-            'changes' => ['deleted' => true],
+            'changes' => $clientDetails,
         ]);
 
         $this->loadClients();
@@ -1922,60 +2118,115 @@ class Expenses extends Component
 
     public function render()
     {
-        $expensesQuery = Expense::with(['client', 'project', 'inventory'])
-            ->when($this->clientFilter, fn ($query) => $query->where('client_id', $this->clientFilter))
-            ->when($this->projectFilter, fn ($query) => $query->where('project_id', $this->projectFilter))
-            ->when($this->clientStatusFilter, fn ($query) => $query->whereHas('client', fn ($clientQuery) => $clientQuery->where('status', $this->clientStatusFilter)))
-            ->when($this->projectStatusFilter, fn ($query) => $query->whereHas('project', fn ($projectQuery) => $projectQuery->where('status', $this->projectStatusFilter)))
-            ->when($this->search, function ($query) {
-                $term = '%' . str_replace(' ', '%', $this->search) . '%';
-
-                $query->where(function ($subQuery) use ($term) {
-                    $subQuery
-                        ->whereHas('client', function ($clientQuery) use ($term) {
-                            $clientQuery->where('name', 'like', $term)
-                                ->orWhere('branch', 'like', $term);
-                        })
-                        ->orWhereHas('project', function ($projectQuery) use ($term) {
-                            $projectQuery->where('name', 'like', $term)
-                                ->orWhere('reference_code', 'like', $term);
-                        })
-                        ->orWhereHas('inventory', function ($inventoryQuery) use ($term) {
-                            $inventoryQuery->where('brand', 'like', $term)
-                                ->orWhere('description', 'like', $term)
-                                ->orWhere('category', 'like', $term);
-                        });
-                });
-            })
-            ->when($this->dateFrom, fn ($query) => $query->whereDate('released_at', '>=', $this->dateFrom))
-            ->when($this->dateTo, fn ($query) => $query->whereDate('released_at', '<=', $this->dateTo));
-
-        $filteredExpenses = $expensesQuery->orderByDesc('released_at')->get();
+        $filteredExpenses = $this->getFilteredExpenses();
 
         $startOfMonth = Carbon::now()->startOfMonth();
         $endOfMonth = Carbon::now()->endOfMonth();
 
-        $monthlyTotal = $filteredExpenses->filter(fn ($expense) => $expense->released_at?->between($startOfMonth, $endOfMonth, true))->sum('total_cost');
+        $monthlyTotal = $filteredExpenses->filter(
+            fn ($expense) => $expense->released_at?->between($startOfMonth, $endOfMonth, true)
+        )->sum('total_cost');
 
-        $summary = [
-            'total' => $filteredExpenses->sum('total_cost'),
-            'month' => $monthlyTotal,
-            'average' => $filteredExpenses->count() ? round($filteredExpenses->avg('total_cost'), 2) : 0,
-            'count' => $filteredExpenses->count(),
-        ];
+        // Filter clients based on search and type
+        $filteredClients = $this->clients;
+        if ($this->clientsSearch || $this->search) {
+            $searchTerm = strtolower($this->clientsSearch ?: $this->search);
+            $filteredClients = $filteredClients->filter(function ($client) use ($searchTerm) {
+                return str_contains(strtolower($client->name), $searchTerm) ||
+                       str_contains(strtolower($client->branch), $searchTerm);
+            });
+        }
+        if ($this->clientTypeFilter) {
+            $filteredClients = $filteredClients->filter(function ($client) {
+                return $client->client_type === $this->clientTypeFilter;
+            });
+        }
 
-        $projectOptions = Project::with('client:id,name')->orderBy('name')->get();
+        // Filter project summaries based on search and client type
+        $filteredProjectSummaries = $this->getProjectSummaries();
+        if ($this->projectsSearch || $this->search) {
+            $searchTerm = strtolower($this->projectsSearch ?: $this->search);
+            $filteredProjectSummaries = $filteredProjectSummaries->filter(function ($project) use ($searchTerm) {
+                return str_contains(strtolower($project->name), $searchTerm) ||
+                       str_contains(strtolower($project->reference_code ?? ''), $searchTerm) ||
+                       str_contains(strtolower($project->client->name), $searchTerm) ||
+                       str_contains(strtolower($project->client->branch), $searchTerm);
+            });
+        }
+        if ($this->clientTypeFilter) {
+            $filteredProjectSummaries = $filteredProjectSummaries->filter(function ($project) {
+                return $project->client->client_type === $this->clientTypeFilter;
+            });
+        }
 
-        $projectSummaries = Project::with([
-            'client:id,name,branch',
-            'expenses' => fn ($query) => $query->with('inventory')->latest('released_at'),
+        return view('livewire.expenses', [
+            'filteredExpenses' => $filteredExpenses,
+            'filteredClients' => $filteredClients,
+            'filteredProjectSummaries' => $filteredProjectSummaries,
+            'projectOptions' => $this->getProjectOptions(),
+            'summary' => $this->buildSummary($filteredExpenses, $monthlyTotal),
+            'receiptGroups' => $this->buildReceiptGroups($filteredExpenses),
+            'projectSummaries' => $this->getProjectSummaries(),
+        ]);
+    }
+
+    private function getFilteredExpenses(): Collection
+    {
+        $searchTerm = $this->receiptsSearch ?: $this->search;
+        return Expense::with(['client', 'project', 'inventory'])
+            ->when($this->clientFilter, fn ($q) => $q->where('client_id', $this->clientFilter))
+            ->when($this->projectFilter, fn ($q) => $q->where('project_id', $this->projectFilter))
+            ->when($this->clientTypeFilter, fn ($q) => $q->whereHas('client', fn ($cq) => $cq->where('client_type', $this->clientTypeFilter)))
+            ->when($this->clientStatusFilter, fn ($q) => $q->whereHas('client', fn ($cq) => $cq->where('status', $this->clientStatusFilter)))
+            ->when($this->projectStatusFilter, fn ($q) => $q->whereHas('project', fn ($pq) => $pq->where('status', $this->projectStatusFilter)))
+            ->when($searchTerm, fn ($q) => $this->applySearchFilter($q, $searchTerm))
+            ->when($this->dateFrom, fn ($q) => $q->whereDate('released_at', '>=', $this->dateFrom))
+            ->when($this->dateTo, fn ($q) => $q->whereDate('released_at', '<=', $this->dateTo))
+            ->orderByDesc('released_at')
+            ->get();
+    }
+
+    private function applySearchFilter($query, $searchTerm)
+    {
+        $term = '%' . str_replace(' ', '%', $searchTerm) . '%';
+
+        return $query->where(function ($q) use ($term) {
+            $q->whereHas('client', fn ($cq) => $cq->where('name', 'like', $term)->orWhere('branch', 'like', $term))
+                ->orWhereHas('project', fn ($pq) => $pq->where('name', 'like', $term)->orWhere('reference_code', 'like', $term))
+                ->orWhereHas('inventory', fn ($iq) => $iq->where('brand', 'like', $term)->orWhere('description', 'like', $term)->orWhere('category', 'like', $term));
+        });
+    }
+
+    private function getProjectOptions(): Collection
+    {
+        return Project::with('client:id,name')->orderBy('name')->get();
+    }
+
+    private function getProjectSummaries(): Collection
+    {
+        return Project::with([
+            'client:id,name,branch,client_type',
+            'expenses' => fn ($q) => $q->with('inventory')->latest('released_at'),
         ])
             ->withCount('expenses')
             ->withSum('expenses as expenses_total', 'total_cost')
             ->orderByDesc('created_at')
             ->get();
+    }
 
-        $receiptGroups = $filteredExpenses
+    private function buildSummary(Collection $expenses, float $monthlyTotal): array
+    {
+        return [
+            'total' => $expenses->sum('total_cost'),
+            'month' => $monthlyTotal,
+            'average' => $expenses->count() ? round($expenses->avg('total_cost'), 2) : 0,
+            'count' => $expenses->count(),
+        ];
+    }
+
+    private function buildReceiptGroups(Collection $expenses): Collection
+    {
+        return $expenses
             ->groupBy(fn ($expense) => $expense->client_id)
             ->map(function (Collection $clientExpenses) {
                 $client = $clientExpenses->first()->client;
@@ -1990,13 +2241,5 @@ class Expenses extends Component
             })
             ->sortBy(fn ($group) => strtolower($group['client']->name ?? ''))
             ->values();
-
-        return view('livewire.expenses', [
-            'filteredExpenses' => $filteredExpenses,
-            'projectOptions' => $projectOptions,
-            'summary' => $summary,
-            'receiptGroups' => $receiptGroups,
-            'projectSummaries' => $projectSummaries,
-        ]);
     }
 }

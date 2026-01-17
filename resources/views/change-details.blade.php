@@ -36,31 +36,6 @@
                     </tr>
                 </thead>
                 <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    <tr>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">Field 1</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">Value A</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">Value A'</td>
-                    </tr>
-                    <tr>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">Field 2</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">Value B</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">Value B'</td>
-                    </tr>
-                    <tr>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">Field 3</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">Value C</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">Value C'</td>
-                    </tr>
-                    <tr>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">Field 4</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">Value D</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">Value D'</td>
-                    </tr>
-                    <tr>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">Field 5</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">Value E</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">Value E'</td>
-                    </tr>
                 </tbody>
             </table>
         </div>
@@ -79,104 +54,6 @@
                     </button>
                 </div>
 
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                    <!-- Before Changes Panel -->
-                    <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6">
-                        <div class="flex items-center mb-4">
-                            <div class="bg-red-500 rounded-full p-2 mr-3">
-                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                </svg>
-                            </div>
-                            <h2 class="text-xl font-semibold text-red-900 dark:text-red-100">Before Changes</h2>
-                        </div>
-
-                        <div class="space-y-4">
-                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Field 1</label>
-                                <div class="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 px-3 py-2 rounded">Value A</div>
-                            </div>
-
-                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Field 2</label>
-                                <div class="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 px-3 py-2 rounded">Value B</div>
-                            </div>
-
-                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Field 3</label>
-                                <div class="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 px-3 py-2 rounded">Value C</div>
-                            </div>
-
-                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Field 4</label>
-                                <div class="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 px-3 py-2 rounded">Value D</div>
-            Fields Changed                </div>
-
-                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Field 5</label>
-                                <div class="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 px-3 py-2 rounded">Value E</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- After Changes Panel -->
-                    <div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-6">
-                        <div class="flex items-center mb-4">
-                            <div class="bg-green-500 rounded-full p-2 mr-3">
-                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                </svg>
-                            </div>
-                            <h2 class="text-xl font-semibold text-green-900 dark:text-green-100">After Changes</h2>
-                        </div>
-
-                        <div class="space-y-4">
-                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border-l-4 border-green-500">
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Field 1</label>
-                                <div class="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 px-3 py-2 rounded font-semibold text-green-700 dark:text-green-300">Value A'</div>
-                            </div>
-
-                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border-l-4 border-green-500">
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Field 2</label>
-                                <div class="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 px-3 py-2 rounded font-semibold text-green-700 dark:text-green-300">Value B'</div>
-                            </div>
-
-                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border-l-4 border-green-500">
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Field 3</label>
-                                <div class="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 px-3 py-2 rounded font-semibold text-green-700 dark:text-green-300">Value C'</div>
-                            </div>
-
-                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border-l-4 border-green-500">
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Field 4</label>
-                                <div class="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 px-3 py-2 rounded font-semibold text-green-700 dark:text-green-300">Value D'</div>
-                            </div>
-
-                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border-l-4 border-green-500">
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Field 5</label>
-                                <div class="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 px-3 py-2 rounded font-semibold text-green-700 dark:text-green-300">Value E'</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Summary Section -->
-                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Change Summary</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div class="text-center">
-                            <div class="text-2xl font-bold text-green-600 dark:text-green-400">3</div>
-                            <div class="text-sm text-gray-600 dark:text-gray-400">Items Added</div>
-                        </div>
-                        <div class="text-center">
-                            <div class="text-2xl font-bold text-red-600 dark:text-red-400">1</div>
-                            <div class="text-sm text-gray-600 dark:text-gray-400">Items Removed</div>
-                        </div>
-                        <div class="text-center">
-                            <div class="text-2xl font-bold text-yellow-600 dark:text-yellow-400">2</div>
-                            <div class="text-sm text-gray-600 dark:text-gray-400">Items Modified</div>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
     </div>

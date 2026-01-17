@@ -57,9 +57,7 @@
                                 @if($tool->hasImageBlob())
                                     <img wire:click="viewImage({{ $tool->id }})" src="{{ $tool->image_url }}" alt="{{ $tool->brand }}" class="h-12 w-12 rounded-lg object-cover border border-[#1B2537] cursor-pointer hover:opacity-80 transition-opacity">
                                 @else
-                                    <div class="flex h-12 w-12 items-center justify-center rounded-lg border border-dashed border-[#1B2537] bg-[#121f33]">
-                                        <x-heroicon-o-photo class="h-6 w-6 text-gray-600" />
-                                    </div>
+                                    <span class="text-gray-400">no changes for all uniform approach</span>
                                 @endif
                             </td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-100">{{ $tool->quantity }}</td>

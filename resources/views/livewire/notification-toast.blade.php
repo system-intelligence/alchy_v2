@@ -9,7 +9,16 @@
             x-transition:leave="transition ease-in duration-300"
             x-transition:leave-start="opacity-100 transform translate-x-0"
             x-transition:leave-end="opacity-0 transform translate-x-full"
-            class="max-w-sm w-full bg-white dark:bg-gray-800 shadow-lg rounded-xl border border-gray-200 dark:border-gray-700 p-4 flex items-start space-x-3"
+            class="max-w-sm w-full shadow-2xl rounded-xl border-2 p-4 flex items-start space-x-3
+            @if($notification['type'] === 'success')
+                bg-green-50 dark:bg-green-900/20 border-green-400 dark:border-green-600
+            @elseif($notification['type'] === 'error')
+                bg-red-50 dark:bg-red-900/20 border-red-400 dark:border-red-600
+            @elseif($notification['type'] === 'warning')
+                bg-yellow-50 dark:bg-yellow-900/20 border-yellow-400 dark:border-yellow-600
+            @else
+                bg-blue-50 dark:bg-blue-900/20 border-blue-400 dark:border-blue-600
+            @endif"
             x-init="
                 setTimeout(() => {
                     show = false;
@@ -32,7 +41,16 @@
 
             <!-- Content -->
             <div class="flex-1 min-w-0">
-                <p class="text-sm font-medium text-gray-900 dark:text-white">
+                <p class="text-sm font-semibold
+                    @if($notification['type'] === 'success')
+                        text-green-800 dark:text-green-200
+                    @elseif($notification['type'] === 'error')
+                        text-red-800 dark:text-red-200
+                    @elseif($notification['type'] === 'warning')
+                        text-yellow-800 dark:text-yellow-200
+                    @else
+                        text-blue-800 dark:text-blue-200
+                    @endif">
                     {{ $notification['message'] }}
                 </p>
             </div>

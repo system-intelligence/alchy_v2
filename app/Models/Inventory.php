@@ -1,9 +1,10 @@
 <?php
-
 namespace App\Models;
 
 use App\Enums\InventoryStatus;
+use App\Models\StockMovement;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -29,6 +30,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class Inventory extends Model
 {
+    use HasFactory;
+
     /**
      * The attributes that are mass assignable.
      *
@@ -58,7 +61,7 @@ class Inventory extends Model
     /**
      * Valid category values for inventory items.
      */
-    public const CATEGORIES = ['BODEGA ROOM', 'ALCHY ROOM'];
+    public const CATEGORIES = ['Bodega Room', 'IT Room', 'Laser Room', 'LED Room', 'Office Material Room'];
 
     /**
      * Attribute casting configuration.
@@ -77,6 +80,16 @@ class Inventory extends Model
     public function expenses(): HasMany
     {
         return $this->hasMany(Expense::class);
+    }
+
+    /**
+     * Get the stock movements relationship.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany<\App\Models\StockMovement>
+     */
+    public function stockMovements(): HasMany
+    {
+        return $this->hasMany(StockMovement::class)->orderBy('created_at', 'desc');
     }
 
     /**
@@ -100,13 +113,13 @@ class Inventory extends Model
     }
 
     /**
-     * Set the category attribute with auto uppercase conversion.
+     * Set the category attribute.
      *
      * @param string|null $value
      */
     public function setCategoryAttribute(?string $value): void
     {
-        $this->attributes['category'] = is_string($value) ? strtoupper($value) : $value;
+        $this->attributes['category'] = $value;
     }
 
     /**
@@ -300,5 +313,165 @@ class Inventory extends Model
     public function getAvailableQuantity(): int
     {
         return max(0, $this->quantity);
+    }
+
+    /**
+     * Record a stock movement.
+     *
+     * @param string $movementType
+     * @param int $quantity
+     * @param int $userId
+     * @param array $additionalData
+     * @return \App\Models\StockMovement
+     */
+    public function recordStockMovement(string $movementType, int $quantity, int $userId, array $additionalData = [], ?int $previousQuantity = null): StockMovement
+    {
+        // If previous quantity not provided, try to get it from the original attributes
+        if ($previousQuantity === null) {
+            $previousQuantity = $this->getOriginal('quantity');
+            if ($previousQuantity === null) {
+                // If no original, assume current quantity minus the change
+                $previousQuantity = $this->quantity - $quantity;
+            }
+        }
+
+        // Ensure new_quantity reflects the current state after the change
+        $newQuantity = $this->quantity;
+
+        return StockMovement::create([
+            'inventory_id' => $this->id,
+            'user_id' => $userId,
+            'movement_type' => $movementType,
+            'quantity' => $movementType === 'outbound' ? -$quantity : $quantity, // Negative for outbound
+            'cost_per_unit' => $additionalData['cost_per_unit'] ?? null,
+            'total_cost' => $additionalData['total_cost'] ?? null,
+            'previous_quantity' => $previousQuantity,
+            'new_quantity' => $newQuantity,
+            'location' => $this->category,
+            ...$additionalData,
+        ]);
+    }
+
+    /**
+     * Add inbound stock.
+     *
+     * @param int $quantity
+     * @param int $userId
+     * @param array $additionalData
+     * @return bool
+     */
+    public function addInboundStock(int $quantity, int $userId, array $additionalData = []): bool
+    {
+        $previousQuantity = $this->quantity;
+        $this->quantity += $quantity;
+        if ($this->save()) {
+            // Record stock movement first
+            $stockMovement = $this->recordStockMovement('inbound', $quantity, $userId, $additionalData, $previousQuantity);
+
+            // Log successful stock movement creation
+            \Log::info('StockMovement created for inbound addition', [
+                'inventory_id' => $this->id,
+                'movement_id' => $stockMovement->id,
+                'quantity_added' => $quantity,
+                'previous_quantity' => $previousQuantity,
+                'new_quantity' => $this->quantity,
+                'user_id' => $userId,
+            ]);
+
+            // Create professional history entry for stock addition
+            $historyEntry = \App\Models\History::create([
+                'user_id' => $userId,
+                'action' => 'Inbound Stock Added',
+                'model' => 'inventory',
+                'model_id' => $this->id,
+                'old_values' => [
+                    'quantity' => $previousQuantity,
+                ],
+                'changes' => [
+                    'quantity' => $quantity,
+                    'inventory_item' => $this->brand . ' - ' . $this->description,
+                    'cost_per_unit' => $additionalData['cost_per_unit'] ?? null,
+                    'total_cost' => $additionalData['total_cost'] ?? null,
+                    'supplier' => $additionalData['supplier'] ?? null,
+                    'location' => $additionalData['location'] ?? $this->category,
+                    'notes' => $additionalData['notes'] ?? null,
+                    'reference' => $additionalData['reference'] ?? null,
+                    'stock_movement_id' => $stockMovement->id,
+                ],
+            ]);
+
+            // Log successful history creation
+            \Log::info('History entry created for inbound stock addition', [
+                'history_id' => $historyEntry->id,
+                'inventory_id' => $this->id,
+                'action' => 'Inbound Stock Added',
+                'quantity' => $quantity,
+                'user_id' => $userId,
+            ]);
+
+            $this->updateStatus();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Remove outbound stock.
+     *
+     * @param int $quantity
+     * @param int $userId
+     * @param array $additionalData
+     * @return bool
+     */
+    public function removeOutboundStock(int $quantity, int $userId, array $additionalData = []): bool
+    {
+        if ($this->quantity >= $quantity) {
+            $previousQuantity = $this->quantity;
+            $this->quantity -= $quantity;
+            if ($this->save()) {
+                $this->recordStockMovement('outbound', $quantity, $userId, $additionalData, $previousQuantity);
+
+                // Also record in history
+                \App\Models\History::create([
+                    'user_id' => $userId,
+                    'action' => 'Outbound Stock Removed',
+                    'model' => 'inventory',
+                    'model_id' => $this->id,
+                    'old_values' => [
+                        'quantity' => $previousQuantity,
+                    ],
+                    'changes' => [
+                        'quantity' => $this->quantity,
+                        'notes' => $additionalData['notes'] ?? null,
+                        'reference' => $additionalData['reference'] ?? null,
+                    ],
+                ]);
+
+                $this->updateStatus();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Adjust stock quantity.
+     *
+     * @param int $newQuantity
+     * @param int $userId
+     * @param array $additionalData
+     * @return bool
+     */
+    public function adjustStock(int $newQuantity, int $userId, array $additionalData = []): bool
+    {
+        $previousQuantity = $this->quantity;
+        $quantityDifference = $newQuantity - $this->quantity;
+        $this->quantity = $newQuantity;
+        if ($this->save()) {
+            $this->recordStockMovement('adjustment', $quantityDifference, $userId, $additionalData, $previousQuantity);
+            $this->updateStatus();
+            return true;
+        }
+        return false;
     }
 }

@@ -1,4 +1,38 @@
 <div>
+<script>
+function formatNumberInput(input) {
+    // Remove all non-digit characters
+    let value = input.value.replace(/[^\d]/g, '');
+
+    // Format with commas
+    if (value) {
+        value = parseInt(value).toLocaleString('en-US');
+    }
+
+    // Update the input value
+    input.value = value;
+}
+
+function formatDecimalInput(input) {
+    // Remove all non-digit and non-decimal characters except first dot
+    let value = input.value.replace(/[^\d.]/g, '');
+    let parts = value.split('.');
+    if (parts.length > 2) {
+        value = parts[0] + '.' + parts.slice(1).join('');
+    }
+
+    // Format the integer part with commas
+    if (value) {
+        let [integerPart, decimalPart] = value.split('.');
+        integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        value = decimalPart !== undefined ? integerPart + '.' + decimalPart : integerPart;
+    }
+
+    // Update the input value
+    input.value = value;
+}
+</script>
+
     <div class="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
             <h1 class="text-3xl font-semibold text-gray-100">Expenses Tracking</h1>
@@ -9,13 +43,37 @@
                 <button wire:click="openProjectModal" class="inline-flex items-center gap-2 rounded-xl bg-[#172033] px-5 py-3 text-sm font-semibold text-primary-100 transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#1f2c43]">
                     <x-heroicon-o-folder-plus class="h-4 w-4" />
                     Add Project
-                </button>
+                </button>   
                 <button wire:click="openClientModal" class="inline-flex items-center gap-2 rounded-xl bg-primary-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-primary-500/20 transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-600">
                     <x-heroicon-o-user-plus class="h-4 w-4" />
                     Add New Client
                 </button>
             </div>
         @endif
+    </div>
+
+    <!-- Global Search and Filters -->
+    <div class="mb-6 space-y-4">
+        <div class="relative max-w-md">
+            <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                <x-heroicon-o-magnifying-glass class="h-5 w-5 text-gray-400" />
+            </div>
+            <input wire:model.live.debounce.300ms="search" type="text" placeholder="Search across all expenses..." class="w-full rounded-xl border border-[#1B2537] bg-[#121f33] pl-10 pr-4 py-3 text-sm text-gray-100 placeholder-gray-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" />
+        </div>
+
+        <!-- Client Type Filter -->
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs font-semibold uppercase tracking-wide text-gray-400">Filter by Type:</span>
+            <button wire:click="$set('clientTypeFilter', '')" class="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors {{ !$clientTypeFilter ? 'border-primary-500/60 bg-primary-500/20 text-primary-100' : 'border-[#1B2537] bg-[#121f33] text-gray-400 hover:border-primary-500/40 hover:text-primary-100' }}">
+                All Types
+            </button>
+            <button wire:click="$set('clientTypeFilter', 'banking')" class="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors {{ $clientTypeFilter === 'banking' ? 'border-primary-500/60 bg-primary-500/20 text-primary-100' : 'border-[#1B2537] bg-[#121f33] text-gray-400 hover:border-primary-500/40 hover:text-primary-100' }}">
+                Banking
+            </button>
+            <button wire:click="$set('clientTypeFilter', 'non_banking')" class="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors {{ $clientTypeFilter === 'non_banking' ? 'border-primary-500/60 bg-primary-500/20 text-primary-100' : 'border-[#1B2537] bg-[#121f33] text-gray-400 hover:border-primary-500/40 hover:text-primary-100' }}">
+                Non-Banking
+            </button>
+        </div>
     </div>
 
     <!-- Main Tabs Navigation -->
@@ -144,26 +202,26 @@
         <div class="mb-10 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div class="rounded-2xl border border-primary-500/40 bg-primary-500/10 p-6">
             <p class="text-xs font-semibold uppercase tracking-wide text-primary-200">Total Spend</p>
-            <p class="mt-2 text-2xl font-semibold text-white">₱{{ number_format($summary['total'] ?? 0, 2) }}</p>
+            <p class="mt-2 text-2xl font-semibold text-white">₱{{ number_format($summary['total'] ?? 0, 2, '.', ',') }}</p>
         </div>
         <div class="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-6">
             <p class="text-xs font-semibold uppercase tracking-wide text-amber-200">This Month</p>
-            <p class="mt-2 text-2xl font-semibold text-white">₱{{ number_format($summary['month'] ?? 0, 2) }}</p>
+            <p class="mt-2 text-2xl font-semibold text-white">₱{{ number_format($summary['month'] ?? 0, 2, '.', ',') }}</p>
         </div>
         <div class="rounded-2xl border border-sky-500/40 bg-sky-500/10 p-6">
             <p class="text-xs font-semibold uppercase tracking-wide text-sky-200">Average / Expense</p>
-            <p class="mt-2 text-2xl font-semibold text-white">₱{{ number_format($summary['average'] ?? 0, 2) }}</p>
+            <p class="mt-2 text-2xl font-semibold text-white">₱{{ number_format($summary['average'] ?? 0, 2, '.', ',') }}</p>
         </div>
         <div class="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-6">
             <p class="text-xs font-semibold uppercase tracking-wide text-emerald-200">Expenses Logged</p>
-            <p class="mt-2 text-2xl font-semibold text-white">{{ number_format($summary['count'] ?? 0) }}</p>
+            <p class="mt-2 text-2xl font-semibold text-white">{{ number_format($summary['count'] ?? 0, 0, '.', ',') }}</p>
         </div>
     </div>
     @endif
 
     <!-- Our Clients Tab -->
     @if($activeMainTab === 'clients')
-        @if($clients->count() === 0)
+        @if($filteredClients->count() === 0)
             <div class="rounded-3xl border border-dashed border-gray-600/60 bg-[#172033] px-6 py-12 text-center">
                 <div class="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-primary-500/10 text-primary-300">
                     <x-heroicon-o-building-office class="h-10 w-10" />
@@ -181,12 +239,12 @@
             </div>
         @else
             <!-- Client Cards Header -->
-            <div class="mb-6 flex items-center justify-between">
+            <div class="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h2 class="text-2xl font-bold text-white">
                         Our <span class="bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">Clients</span>
                     </h2>
-                    <p class="mt-1 text-sm text-gray-400">{{ $clients->count() }} {{ Str::plural('client', $clients->count()) }} · {{ $clients->sum(fn($c) => $c->projects->count()) }} total {{ Str::plural('project', $clients->sum(fn($c) => $c->projects->count())) }}</p>
+                    <p class="mt-1 text-sm text-gray-400">{{ $filteredClients->count() }} {{ Str::plural('client', $filteredClients->count()) }} · {{ $filteredClients->sum(fn($c) => $c->projects->count()) }} total {{ Str::plural('project', $filteredClients->sum(fn($c) => $c->projects->count())) }}</p>
                 </div>
                 @if(auth()->user()->isSystemAdmin())
                     <button wire:click="openClientModal" class="inline-flex items-center gap-2 rounded-xl bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/20 transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-600">
@@ -197,7 +255,7 @@
             </div>
 
             <div class="mx-auto grid max-w-screen-2xl grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-            @foreach($clients as $client)
+            @foreach($filteredClients as $client)
                 @php
                     $projectCount = $client->projects->count();
                     $activeProjectCount = $client->projects->filter(fn($project) => $project->isActive())->count();
@@ -216,7 +274,7 @@
                 <div class="flex min-h-48 flex-col rounded-2xl border border-[#1B2537] bg-[#121f33] p-5 shadow-lg shadow-black/20 transition-transform duration-200 hover:-translate-y-1 hover:shadow-xl">
                     <div class="flex items-start justify-between">
                         <div class="flex flex-1 items-center">
-                            @if($client->logo_url)
+                            @if($client->logo_url && $client->logo_url !== asset('images/no-image.png'))
                                 <img src="{{ $client->logo_url }}" alt="{{ $client->name }} logo" class="h-12 w-12 rounded-xl border border-[#1B2537] object-cover">
                             @else
                                 <div class="flex h-12 w-12 items-center justify-center rounded-xl border border-dashed border-gray-600 bg-[#172033] text-gray-400">
@@ -248,6 +306,7 @@
                             @if($client->job_type)
                                 <span class="rounded-full bg-[#172033] px-3 py-1 text-xs font-medium capitalize text-gray-300">{{ $client->job_type }}</span>
                             @endif
+                            <span class="rounded-full bg-[#172033] px-3 py-1 text-xs font-medium text-gray-300">{{ ucfirst(str_replace('_', '-', $client->client_type ?? 'non-banking')) }}</span>
                             <span class="rounded-full bg-[#172033] px-3 py-1 text-xs font-medium text-gray-300">{{ $client->expenses->count() }} expenses</span>
                             <span class="rounded-full bg-[#172033] px-3 py-1 text-xs font-medium text-gray-300">{{ $projectCount }} {{ \Illuminate\Support\Str::plural('project', $projectCount) }}</span>
                         </div>
@@ -274,7 +333,7 @@
                     <div class="mt-auto flex items-center justify-between border-t border-[#1B2537] pt-4">
                         <div>
                             <p class="text-xs uppercase tracking-wide text-gray-400">Total Expenses</p>
-                            <p class="mt-1 text-2xl font-semibold text-emerald-300">₱{{ number_format($client->expenses->sum('total_cost'), 2) }}</p>
+                            <p class="mt-1 text-2xl font-semibold text-emerald-300">₱{{ number_format($client->expenses->sum('total_cost'), 2, '.', ',') }}</p>
                         </div>
                         <button wire:click="viewExpenses({{ $client->id }})" class="inline-flex items-center gap-2 rounded-xl bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-500/20 transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-600">
                             <x-heroicon-o-eye class="h-4 w-4" />
@@ -289,7 +348,7 @@
 
     <!-- Project Management Tab -->
         @if($activeMainTab === 'projects')
-            @if($projectSummaries->count())
+            @if($filteredProjectSummaries->count())
                 <div class="mb-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div>
                         <h2 class="text-2xl font-bold text-white">
@@ -298,12 +357,12 @@
                         <p class="mt-1 text-sm text-gray-400">Every reference code with its running total and latest releases</p>
                     </div>
                     <span class="inline-flex items-center rounded-full border border-[#1B2537] bg-[#121f33] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                        {{ number_format($projectSummaries->count()) }} {{ \Illuminate\Support\Str::plural('project', $projectSummaries->count()) }}
+                    {{ number_format($filteredProjectSummaries->count()) }} {{ \Illuminate\Support\Str::plural('project', $filteredProjectSummaries->count()) }}
                     </span>
                 </div>
 
                 <div class="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">
-                    @foreach($projectSummaries as $projectSummary)
+                    @foreach($filteredProjectSummaries as $projectSummary)
                         @php
                             $statusPalette = [
                                 'planning' => 'border-sky-500/40 bg-sky-500/10 text-sky-200',
@@ -322,6 +381,9 @@
                                         <span class="inline-block rounded-md border border-[#1B2537] bg-[#172033] px-2 py-0.5 text-[10px] uppercase tracking-widest text-gray-400 mb-2">
                                             {{ $projectSummary->reference_code ?? 'NO-REF' }}
                                         </span>
+                                        <span class="inline-block rounded-md border border-[#1B2537] bg-[#172033] px-2 py-0.5 text-[10px] uppercase tracking-widest text-gray-400 mb-2">
+                                            created at : {{ $projectSummary->created_at ? $projectSummary->created_at->setTimezone('Asia/Manila')->format('M d, Y') : '—' }}
+                                        </span>
                                         <h3 class="text-xl font-bold text-white mb-1">{{ $projectSummary->name }}</h3>
                                         <p class="text-sm text-gray-400">{{ $projectSummary->client->name }} · {{ $projectSummary->client->branch }}</p>
                                         <span class="mt-2 inline-flex items-center rounded-full border border-[#1B2537] bg-[#172033] px-3 py-1 text-xs font-medium capitalize text-gray-300">
@@ -338,11 +400,11 @@
                             <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
                                 <div class="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3">
                                     <p class="text-xs uppercase tracking-wide text-emerald-200">Total Spend</p>
-                                    <p class="mt-1 text-lg font-semibold text-white">₱{{ number_format($projectSummary->expenses_total ?? 0, 2) }}</p>
+                                    <p class="mt-1 text-lg font-semibold text-white">₱{{ number_format($projectSummary->expenses_total ?? 0, 2, '.', ',') }}</p>
                                 </div>
                                 <div class="rounded-xl border border-sky-500/40 bg-sky-500/10 p-3">
                                     <p class="text-xs uppercase tracking-wide text-sky-200">Expenses</p>
-                                    <p class="mt-1 text-lg font-semibold text-white">{{ number_format($projectSummary->expenses_count) }}</p>
+                                    <p class="mt-1 text-lg font-semibold text-white">{{ number_format($projectSummary->expenses_count, 0, '.', ',') }}</p>
                                 </div>
                             </div>
 
@@ -422,17 +484,17 @@
         <!-- Receipt Rollup Tab -->
         @if($activeMainTab === 'receipts')
             <div class="mb-6 space-y-6">
-                <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <div>
-                        <h2 class="text-2xl font-bold text-white">
-                            Receipt <span class="bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">Rollup</span>
-                        </h2>
-                        <p class="mt-1 text-sm text-gray-400">Grouped by client and project so you only see each location once.</p>
-                    </div>
-                    <span class="inline-flex items-center rounded-full border border-[#1B2537] bg-[#121f33] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                        {{ number_format($filteredExpenses->count()) }} line items
-                    </span>
+            <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h2 class="text-2xl font-bold text-white">
+                        Receipt <span class="bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">Rollup</span>
+                    </h2>
+                    <p class="mt-1 text-sm text-gray-400">Grouped by client and project so you only see each location once.</p>
                 </div>
+                <span class="inline-flex items-center rounded-full border border-[#1B2537] bg-[#121f33] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                    {{ number_format($filteredExpenses->count()) }} line items
+                </span>
+            </div>
 
                 @forelse($receiptGroups as $receipt)
                     @php
@@ -598,91 +660,6 @@
                 @endforelse
             </div>
 
-            <div class="mt-10 rounded-2xl border border-[#1B2537] bg-[#0d1829]">
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-[#1B2537] text-sm text-gray-200">
-                <thead class="bg-[#121f33] text-xs uppercase tracking-wide text-gray-400">
-                    <tr>
-                        <th class="px-4 py-3 text-left">Released</th>
-                        <th class="px-4 py-3 text-left">Client · Project</th>
-                        <th class="px-4 py-3 text-left">Inventory</th>
-                        <th class="px-4 py-3 text-left">Location</th>
-                        <th class="px-4 py-3 text-left">Project Status</th>
-                        <th class="px-4 py-3 text-right">Total</th>
-                        <th class="px-4 py-3 text-right"></th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-[#1B2537]">
-                    @forelse($filteredExpenses as $expense)
-                        @php
-                            $project = $expense->project;
-                            $projectStatus = $project->status ?? null;
-                            $projectStatusColors = [
-                                'planning' => 'border-sky-500/40 bg-sky-500/10 text-sky-200',
-                                'in_progress' => 'border-primary-500/40 bg-primary-500/15 text-primary-200',
-                                'completed' => 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200',
-                                'warranty' => 'border-amber-500/40 bg-amber-500/15 text-amber-200',
-                            ];
-                            $clientStatusColors = [
-                                'in_progress' => 'border-primary-500/40 bg-primary-500/15 text-primary-200',
-                                'settled' => 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200',
-                                'cancelled' => 'border-red-500/40 bg-red-500/15 text-red-200',
-                            ];
-                            $releasedAt = $expense->released_at?->setTimezone('Asia/Manila');
-                        @endphp
-                        <tr class="transition-colors hover:bg-[#121f33]">
-                            <td class="whitespace-nowrap px-4 py-3">{{ $releasedAt ? $releasedAt->format('M d, Y · h:i A') : '—' }}</td>
-                            <td class="px-4 py-3">
-                                <div class="font-semibold text-gray-100">{{ $expense->client->name }}</div>
-                                <div class="text-xs text-gray-400">
-                                    @if($project)
-                                        {{ $project->name }}
-                                        @if($project->reference_code)
-                                            · {{ $project->reference_code }}
-                                        @endif
-                                    @else
-                                        <span class="italic text-gray-500">No project linked</span>
-                                    @endif
-                                </div>
-                            </td>
-                            <td class="px-4 py-3">
-                                <div class="text-gray-100">{{ $expense->inventory->brand }}</div>
-                                <div class="text-xs text-gray-400">{{ $expense->inventory->description }}</div>
-                            </td>
-                            <td class="px-4 py-3">
-                                <span class="inline-flex items-center gap-2 rounded-md border border-[#1B2537] bg-[#172033] px-3 py-1 text-xs text-gray-300">
-                                    <span class="h-1.5 w-1.5 rounded-full bg-primary-400"></span>
-                                    {{ $expense->inventory->category ?? '—' }}
-                                </span>
-                            </td>
-                            <td class="px-4 py-3">
-                                @if($project)
-                                    @php
-                                        $badge = $projectStatusColors[$projectStatus] ?? 'border-[#1B2537] bg-[#172033] text-gray-300';
-                                    @endphp
-                                    <span class="inline-flex rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-wide {{ $badge }}">
-                                        {{ ucfirst(str_replace('_', ' ', $projectStatus)) }}
-                                    </span>
-                                @else
-                                    <span class="text-xs text-gray-500">—</span>
-                                @endif
-                            </td>
-                            <td class="whitespace-nowrap px-4 py-3 text-right font-semibold text-gray-100">₱{{ number_format($expense->total_cost, 2) }}</td>
-                            <td class="whitespace-nowrap px-4 py-3 text-right">
-                                <button type="button" wire:click="viewExpenses({{ $expense->client_id }})" class="inline-flex items-center gap-2 rounded-lg border border-[#1B2537] px-3 py-1 text-xs font-semibold text-gray-300 transition-colors hover:bg-primary-500/15 hover:text-primary-200">
-                                    <x-heroicon-o-eye class="h-4 w-4" /> View
-                                </button>
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="7" class="px-4 py-12 text-center text-sm text-gray-400">No expenses match your current filters.</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
-    </div>
         @endif
 
     @if($selectedClient)
@@ -690,7 +667,7 @@
             <div class="w-full max-w-7xl rounded-3xl border border-[#1B2537] bg-[#101828] p-6 sm:p-8 shadow-2xl max-h-[95vh] overflow-y-auto">
                 <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                        <h3 class="text-xl sm:text-2xl font-semibold text-white">Expenses for {{ $selectedClient->name }} · {{ $selectedClient->branch }}</h3>
+                        <h3 class="text-2xl sm:text-3xl font-semibold text-white">Expenses for {{ $selectedClient->name }} · {{ $selectedClient->branch }}</h3>
                         <p class="text-sm text-gray-400">Review releases, adjust costs, and filter by period.</p>
                     </div>
                     <button wire:click="closeModal" class="inline-flex items-center gap-2 rounded-xl border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 transition-colors hover:bg-gray-700/40">
@@ -969,12 +946,12 @@
                                                     </div>
                                                 </td>
                                                 <td class="px-4 py-2 text-sm text-gray-200 align-middle">
-                                                    <div class="whitespace-nowrap">{{ number_format($expense->quantity_used, 2) }}</div>
+                                                    <div class="whitespace-nowrap">{{ number_format($expense->quantity_used, 0, '.', ',') }}</div>
                                                 </td>
                                                 <td class="px-4 py-2 text-sm text-gray-200 align-middle">
                                                     <div class="whitespace-nowrap">
                                                         @if($editingExpenseId == $expense->id)
-                                                            <input type="number" min="0" step="0.01" wire:model="editCostPerUnit" class="w-24 rounded-lg border border-[#1B2537] bg-[#101828] px-2 py-1 text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" />
+                                                            <input type="text" inputmode="decimal" pattern="[0-9,]*\.?[0-9,]*" wire:model="editCostPerUnit" class="w-24 rounded-lg border border-[#1B2537] bg-[#101828] px-2 py-1 text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" oninput="formatDecimalInput(this)" />
                                                             @error('editCostPerUnit') <span class="mt-1 block text-xs text-red-400">{{ $message }}</span> @enderror
                                                         @else
                                                             ₱{{ number_format($expense->cost_per_unit, 2) }}
@@ -1080,8 +1057,8 @@
                 <div class="mt-3 sm:mt-4 flex flex-wrap gap-2">
                     @php
                         $tabs = [
-                            'release' => ['label' => 'Release Materials', 'icon' => 'cube-transparent'],
                             'update' => ['label' => 'Update Project', 'icon' => 'pencil-square'],
+                            'release' => ['label' => 'Recent Releases', 'icon' => 'clock'],
                             'notes' => ['label' => 'Notes', 'icon' => 'document-duplicate'],
                             'receipts' => ['label' => 'Printable Receipt', 'icon' => 'document-text'],
                         ];
@@ -1116,197 +1093,10 @@
 
                 <div class="mt-4 sm:mt-6 flex-1 overflow-y-auto pr-1">
                 @if($manageActiveTab === 'release')
-                    <!-- Two Column Flex Layout: Record Material Release | Recent Releases -->
-                    <div class="flex flex-col lg:flex-row gap-5 sm:gap-6">
-                        
-                        <!-- Column 1: Record Material Release -->
-                        <div class="lg:w-1/2 flex min-w-0 flex-col rounded-xl sm:rounded-2xl border border-[#1B2537] bg-[#0f1829] p-4 sm:p-6 shadow-2xl shadow-black/30">
-                            <div class="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 sm:gap-4">
-                                <div class="flex items-start gap-3">
-                                    <span class="flex h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0 items-center justify-center rounded-lg sm:rounded-xl bg-gradient-to-br from-primary-500/30 to-sky-500/40 text-lg text-primary-100">
-                                        <x-heroicon-o-cog-6-tooth class="h-5 w-5 sm:h-6 sm:w-6" />
-                                    </span>
-                                    <div class="min-w-0 flex-1">
-                                        <h4 class="text-base sm:text-lg font-semibold text-white">Record Material Release</h4>
-                                        <p class="text-[11px] sm:text-xs text-gray-400">Select an item, set the quantity, and we will track stock adjustments automatically.</p>
-                                    </div>
-                                </div>
-                                <span class="inline-flex items-center gap-2 rounded-full border border-primary-500/40 bg-primary-500/15 px-2.5 sm:px-3 py-1 text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-primary-100 self-start sm:self-auto">
-                                    <x-heroicon-o-queue-list class="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-                                    <span class="whitespace-nowrap">{{ count($manageReleaseItems) }} {{ Str::plural('material', count($manageReleaseItems)) }}</span>
-                                </span>
-                            </div>
-
-                            <form wire:submit.prevent="recordProjectRelease" class="mt-4 sm:mt-6 flex flex-1 flex-col">
-                                @error('manageReleaseItems') <span class="block text-xs text-red-400">{{ $message }}</span> @enderror
-
-                                @php $inventoryOptionsCollection = collect($manageInventoryOptions); @endphp
-
-                                <div class="flex flex-1 flex-col gap-4 sm:gap-5">
-                                    <div class="flex-1 space-y-3 sm:space-y-4">
-                                    @if($manageReleaseDuplicateNotice)
-                                        <div class="rounded-lg sm:rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-                                            <div class="flex items-start justify-between gap-3">
-                                                <span>{{ $manageReleaseDuplicateNotice }}</span>
-                                                <button type="button" wire:click="clearManageReleaseNotice" class="rounded-md px-2 py-1 text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-amber-100 transition-colors hover:bg-amber-500/20 flex-shrink-0">Dismiss</button>
-                                            </div>
-                                        </div>
-                                    @endif
-
-                                    <div class="space-y-3 sm:space-y-4 overflow-y-auto pr-1 lg:max-h-[30rem]">
-                                        @foreach($manageReleaseItems as $index => $releaseItem)
-                                            @php
-                                                $selectedInventoryOption = $inventoryOptionsCollection->firstWhere('id', (int)($releaseItem['inventory_id'] ?? 0));
-                                                $selectedElsewhere = collect($manageReleaseItems)
-                                                    ->except([$index])
-                                                    ->pluck('inventory_id')
-                                                    ->filter()
-                                                    ->map(fn($id) => (int) $id)
-                                                    ->values()
-                                                    ->all();
-                                                $quantityValue = (int) ($releaseItem['quantity'] ?? 1);
-                                                $quantityValue = $quantityValue > 0 ? $quantityValue : 1;
-                                                $costValue = $releaseItem['cost_per_unit'] ?? '';
-                                                $lineTotal = ($costValue !== '' && is_numeric($costValue))
-                                                    ? number_format($quantityValue * (float) $costValue, 2)
-                                                    : null;
-                                            @endphp
-                                            <div wire:key="release-item-{{ $index }}" class="relative overflow-hidden rounded-xl sm:rounded-2xl border border-[#1f2b40] bg-gradient-to-br from-[#1a2539] via-[#0f1829] to-[#0a1220] p-4 sm:p-5 shadow-lg shadow-black/25">
-                                                <div class="absolute inset-0 pointer-events-none" style="background: radial-gradient(circle at top right, rgba(91,180,255,0.08), transparent 55%);"></div>
-                                                <div class="relative grid gap-3 sm:gap-4 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center">
-                                                    <div class="flex h-full items-center justify-center rounded-lg sm:rounded-xl border border-primary-500/40 bg-primary-500/15 px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold text-primary-100">
-                                                        {{ str_pad($index + 1, 2, '0', STR_PAD_LEFT) }}
-                                                    </div>
-                                                    <div class="min-w-0">
-                                                        <p class="text-xs sm:text-sm font-semibold text-white">Material {{ $index + 1 }}</p>
-                                                        <p class="text-[10px] sm:text-[11px] text-gray-400 truncate">Choose an item and set usage details below.</p>
-                                                    </div>
-                                                    <div class="flex justify-end md:justify-start">
-                                                        @if(count($manageReleaseItems) > 1)
-                                                            <button type="button" wire:click="removeManageReleaseItem({{ $index }})" class="inline-flex items-center gap-1.5 sm:gap-2 rounded-lg border border-red-500/40 bg-red-500/15 px-2.5 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-red-200 transition-colors hover:bg-red-500/25">
-                                                                <x-heroicon-o-trash class="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-                                                                <span class="hidden sm:inline">Remove</span>
-                                                            </button>
-                                                        @endif
-                                                    </div>
-                                                </div>
-
-                                                <div class="relative mt-4 sm:mt-5 grid gap-3 sm:gap-4 md:grid-cols-[minmax(0,2.4fr)_repeat(2,minmax(0,1fr))]">
-                                                    <div>
-                                                        <label class="mb-1.5 sm:mb-2 block text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-gray-500">Inventory Item</label>
-                                                        <select wire:model="manageReleaseItems.{{ $index }}.inventory_id" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40">
-                                                            <option value="">Select an item...</option>
-                                                            @foreach($manageInventoryOptions as $inventoryOption)
-                                                                @php $optionDisabled = in_array($inventoryOption['id'], $selectedElsewhere, true); @endphp
-                                                                <option value="{{ $inventoryOption['id'] }}" @if($optionDisabled) disabled class="bg-[#121f33]/40 text-gray-500" @endif>
-                                                                    {{ $inventoryOption['label'] }} ({{ $inventoryOption['quantity'] }} in stock)
-                                                                </option>
-                                                            @endforeach
-                                                        </select>
-                                                        @error('manageReleaseItems.' . $index . '.inventory_id') <span class="text-xs text-red-400">{{ $message }}</span> @enderror
-                                                        @if($selectedInventoryOption)
-                                                            <p class="mt-1.5 sm:mt-2 text-[10px] sm:text-xs text-gray-500 truncate">Available: {{ number_format($selectedInventoryOption['quantity']) }} units · Status: {{ ucfirst(str_replace('_', ' ', $selectedInventoryOption['status'])) }}</p>
-                                                        @elseif(!empty($releaseItem['inventory_id']) && ! $selectedInventoryOption)
-                                                            <p class="mt-1.5 sm:mt-2 text-[10px] sm:text-xs text-amber-400">This item is no longer listed in inventory.</p>
-                                                        @endif
-                                                    </div>
-
-                                                    <div>
-                                                        <label class="mb-1.5 sm:mb-2 block text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-gray-500">Quantity</label>
-                                                        <div class="relative flex items-center">
-                                                            <input type="number" min="1" wire:model.defer="manageReleaseItems.{{ $index }}.quantity" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" />
-                                                        </div>
-                                                        @error('manageReleaseItems.' . $index . '.quantity') <span class="text-xs text-red-400">{{ $message }}</span> @enderror
-                                                    </div>
-
-                                                    <div>
-                                                        <label class="mb-1.5 sm:mb-2 block text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-gray-500">Cost per unit</label>
-                                                        <div class="relative flex items-center">
-                                                            <span class="pointer-events-none absolute left-2.5 sm:left-3 text-xs text-gray-500">₱</span>
-                                                            <input type="number" min="0" step="0.01" wire:model.defer="manageReleaseItems.{{ $index }}.cost_per_unit" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-2.5 sm:px-3 py-1.5 sm:py-2 pl-6 sm:pl-7 text-xs sm:text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" />
-                                                        </div>
-                                                        @error('manageReleaseItems.' . $index . '.cost_per_unit') <span class="text-xs text-red-400">{{ $message }}</span> @enderror
-                                                    </div>
-                                                </div>
-
-                                                <div class="relative mt-4 sm:mt-5 flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-2 sm:gap-3">
-                                                    <div class="flex flex-wrap items-center gap-2">
-                                                        @if($selectedInventoryOption)
-                                                            <div class="inline-flex items-center gap-1.5 sm:gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 sm:px-3 py-1 text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-sky-200">
-                                                                <x-heroicon-o-information-circle class="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-                                                                {{ strtoupper(str_replace('_', ' ', $selectedInventoryOption['status'])) }} STOCK
-                                                            </div>
-                                                        @endif
-
-                                                        @if($lineTotal)
-                                                            <div class="inline-flex items-center gap-1.5 sm:gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2.5 sm:px-3 py-1 text-[10px] sm:text-xs font-semibold text-emerald-200">
-                                                                <x-heroicon-o-banknotes class="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-                                                                <span class="whitespace-nowrap">Line Total: ₱{{ $lineTotal }}</span>
-                                                            </div>
-                                                        @endif
-                                                    </div>
-
-                                                    @if(count($manageReleaseItems) > 1)
-                                                        <button type="button" wire:click="removeManageReleaseItem({{ $index }})" class="inline-flex items-center gap-1.5 sm:gap-2 rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-red-200 transition-colors hover:bg-red-500/20 sm:hidden">
-                                                            <x-heroicon-o-trash class="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-                                                            Remove Material
-                                                        </button>
-                                                    @endif
-                                                </div>
-                                            </div>
-                                        @endforeach
-                                    </div>
-
-                                    <div class="mt-5 sm:mt-6 space-y-4 sm:space-y-5 rounded-xl sm:rounded-2xl border border-[#1B2537] bg-[#111c2c] p-4 sm:p-5 shadow-lg shadow-black/10">
-                                        <div class="space-y-3 sm:space-y-4">
-                                            <div>
-                                                <label class="mb-1.5 sm:mb-2 block text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-gray-500">Release Date</label>
-                                                <input type="date" wire:model.defer="manageReleaseDate" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" />
-                                                @error('manageReleaseDate') <span class="text-xs text-red-400">{{ $message }}</span> @enderror
-                                            </div>
-                                            <div>
-                                                <label class="mb-1.5 sm:mb-2 block text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-gray-500">Release Time</label>
-                                                <input type="time" wire:model.defer="manageReleaseTime" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" />
-                                                @error('manageReleaseTime') <span class="text-xs text-red-400">{{ $message }}</span> @enderror
-                                            </div>
-                                            <div>
-                                                <label class="mb-1.5 sm:mb-2 block text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-gray-500">Internal Notes (optional)</label>
-                                                <textarea rows="4" wire:model.defer="manageReleaseNotes" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-100 placeholder-gray-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" placeholder="Document install notes, serials, or handover details."></textarea>
-                                                @error('manageReleaseNotes') <span class="text-xs text-red-400">{{ $message }}</span> @enderror
-                                                @if($manageReleaseNotes && !$manageExpenseNotesSupported)
-                                                    <p class="mt-1.5 sm:mt-2 text-[10px] sm:text-xs text-amber-400">Notes will be saved to the project history log only because the expenses table currently has no notes column.</p>
-                                                @endif
-                                            </div>
-                                        </div>
-
-                                        <div class="space-y-2 rounded-lg sm:rounded-xl border border-primary-500/30 bg-primary-500/10 px-3 sm:px-4 py-2.5 sm:py-3 text-[10px] sm:text-[11px] text-primary-100">
-                                            <div class="flex items-start gap-2">
-                                                <x-heroicon-o-light-bulb class="mt-0.5 h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary-300 flex-shrink-0" />
-                                                <p>Tip: batching multiple materials together will sync inventory adjustments in one go.</p>
-                                            </div>
-                                            <div class="flex items-start gap-2">
-                                                <x-heroicon-o-clipboard-document-list class="mt-0.5 h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary-300 flex-shrink-0" />
-                                                <p>Need to log delivery paperwork? Add internal notes so the audit trail stays complete.</p>
-                                            </div>
-                                        </div>
-
-                                        <div class="flex flex-col gap-2 sm:gap-3 border-t border-[#1B2537] pt-3 sm:pt-4">
-                                            <button type="button" wire:click="addManageReleaseItem" class="inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-lg border border-sky-500/50 bg-sky-500/15 px-3 py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-sky-100 transition-colors hover:bg-sky-500/30">
-                                                <x-heroicon-o-plus class="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-                                                Add Another Material
-                                            </button>
-                                            <button type="submit" class="inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-lg sm:rounded-xl bg-gradient-to-r from-primary-500 to-sky-500 px-4 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-white shadow-lg shadow-primary-500/30 transition-all duration-200 hover:-translate-y-0.5 hover:from-primary-600 hover:to-sky-500">
-                                                <x-heroicon-o-check class="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-                                                Record Release
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                      <!-- Column 2: Recent Releases -->
-                        <div class="lg:w-1/2 flex min-w-0 flex-col rounded-xl sm:rounded-2xl border border-[#1B2537] bg-[#0f1829] p-4 sm:p-5 shadow-2xl shadow-black/30">
+                    <!-- Single Column Layout: Recent Releases -->
+                    <div class="flex flex-col gap-5 sm:gap-6">
+                       <!-- Recent Releases -->
+                       <div class="lg:w-full flex min-w-0 flex-col rounded-xl sm:rounded-2xl border border-[#1B2537] bg-[#0f1829] p-4 sm:p-5 shadow-2xl shadow-black/30">
                             <div class="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 sm:gap-4 pb-4 border-b border-[#1B2537]">
                                 <div class="min-w-0 flex-1">
                                     <h4 class="text-base sm:text-lg font-semibold text-white">Recent Releases</h4>
@@ -1338,10 +1128,24 @@
                                                             <p class="text-xs sm:text-sm font-semibold text-white truncate">{{ $release['inventory']['brand'] ?? 'Unknown Item' }}</p>
                                                             <p class="text-[10px] sm:text-[11px] text-gray-400 truncate">{{ $release['inventory']['description'] ?? '—' }}</p>
                                                         </div>
-                                                        <span class="inline-flex items-center gap-1.5 sm:gap-2 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 sm:px-3 py-1 text-[10px] sm:text-xs font-semibold text-emerald-200 self-start sm:self-auto whitespace-nowrap">
-                                                            <x-heroicon-o-banknotes class="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
-                                                            ₱{{ number_format($release['total'], 2) }}
-                                                        </span>
+                                                        @if($editingReleaseId == $release['id'])
+                                                            <div class="flex items-center gap-2">
+                                                                <div class="relative flex items-center">
+                                                                    <span class="pointer-events-none absolute left-2 text-[10px] text-gray-500">₱</span>
+                                                                    <input type="text" inputmode="decimal" pattern="[0-9,]*\.?[0-9,]*" wire:model="editReleaseCostPerUnit" class="w-20 rounded-lg border border-[#1B2537] bg-[#0d1829] px-2 py-1 pl-5 text-[10px] text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" oninput="formatDecimalInput(this)" />
+                                                                </div>
+                                                                <button wire:click="saveEditRelease" class="rounded-lg bg-emerald-500/20 px-2 py-1 text-[10px] font-semibold text-emerald-200 transition-colors hover:bg-emerald-500/30">Save</button>
+                                                                <button wire:click="cancelEditRelease" class="rounded-lg border border-gray-600 px-2 py-1 text-[10px] text-gray-300 transition-colors hover:bg-gray-700/40">Cancel</button>
+                                                            </div>
+                                                        @else
+                                                            <div class="flex items-center gap-2">
+                                                                <span class="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold text-emerald-200 whitespace-nowrap">
+                                                                    <x-heroicon-o-banknotes class="h-3.5 w-3.5 flex-shrink-0" />
+                                                                    ₱{{ number_format($release['total'], 2) }}
+                                                                </span>
+                                                                <button wire:click="editReleaseCost({{ $release['id'] }})" class="rounded-lg bg-primary-500/15 px-2 py-1 text-[10px] font-semibold text-primary-200 transition-colors hover:bg-primary-500/25">Edit</button>
+                                                            </div>
+                                                        @endif
                                                     </div>
                                                     <div class="mt-3 sm:mt-4 grid gap-2 sm:gap-3 text-[10px] sm:text-[11px] text-gray-400 sm:grid-cols-3">
                                                         <div class="flex items-center gap-1.5 sm:gap-2">
@@ -1350,7 +1154,7 @@
                                                         </div>
                                                         <div class="flex items-center gap-1.5 sm:gap-2">
                                                             <x-heroicon-o-cube class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-500 flex-shrink-0" />
-                                                            <span class="truncate">{{ number_format($release['quantity'], 2) }} unit(s)</span>
+                                                            <span class="truncate">{{ number_format($release['quantity'], 0, '.', ',') }} unit(s)</span>
                                                         </div>
                                                         <div class="flex items-center gap-1.5 sm:gap-2">
                                                             <x-heroicon-o-currency-dollar class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-500 flex-shrink-0" />
@@ -1418,6 +1222,15 @@
                                 </button>
                             </div>
                         </form>
+
+                        @if($manageProjectUpdateMessage)
+                            <div class="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                                <div class="flex items-center gap-2">
+                                    <x-heroicon-o-check-circle class="h-5 w-5 text-emerald-400" />
+                                    <span>{{ $manageProjectUpdateMessage }}</span>
+                                </div>
+                            </div>
+                        @endif
 
                         <!-- Danger Zone -->
                         <div class="mt-6 sm:mt-8 rounded-xl sm:rounded-2xl border border-red-500/40 bg-red-500/5 p-4 sm:p-5">
@@ -1548,7 +1361,7 @@
                                             <p class="text-[10px] sm:text-xs text-gray-500 truncate">{{ $releasedAt ? $releasedAt->format('M d, Y · h:i A') : '—' }}</p>
                                             <p class="text-xs sm:text-sm font-semibold text-gray-100 truncate">{{ $release['inventory']['brand'] ?? 'Unknown Item' }}</p>
                                             <p class="text-[10px] sm:text-xs text-gray-400 truncate">{{ $release['inventory']['description'] ?? '—' }}</p>
-                                            <p class="mt-1 text-[10px] sm:text-xs text-emerald-300">{{ number_format($release['quantity'], 2) }} × ₱{{ number_format($release['cost_per_unit'], 2) }} = ₱{{ number_format($release['total'], 2) }}</p>
+                                            <p class="mt-1 text-[10px] sm:text-xs text-emerald-300">{{ number_format($release['quantity'], 0, '.', ',') }} × ₱{{ number_format($release['cost_per_unit'], 2) }} = ₱{{ number_format($release['total'], 2) }}</p>
                                         </div>
                                     @endforeach
                                 </div>
@@ -1691,7 +1504,7 @@
                                         @endif
                                     </td>
                                     <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-200">
-                                        {{ number_format($expense['quantity_used'], 2) }} × ₱{{ number_format($expense['cost_per_unit'], 2) }}
+                                        {{ number_format($expense['quantity_used'], 0, '.', ',') }} × ₱{{ number_format($expense['cost_per_unit'], 2) }}
                                     </td>
                                     <td class="whitespace-nowrap px-4 py-3 text-right font-semibold text-emerald-300">₱{{ number_format($expense['total_cost'], 2) }}</td>
                                 </tr>
@@ -1738,7 +1551,7 @@
                         </div>
                         <div>
                             <label class="mb-2 block text-sm font-medium text-gray-300">Branch / Location</label>
-                            <select wire:model.live="projectClientId" @class(['w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40', 'opacity-60' => !$projectClientName]) @disabled(!$projectClientName)>
+                            <select wire:model.live="projectClientId" required @class(['w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40', 'opacity-60' => !$projectClientName]) @disabled(!$projectClientName)>
                                 <option value="">@if($projectClientName) Select a branch... @else Choose a name first @endif</option>
                                 @foreach($availableBranches as $clientOption)
                                     <option value="{{ $clientOption->id }}">{{ $clientOption->branch ?? 'Main Branch' }}</option>
@@ -1748,18 +1561,12 @@
                         </div>
                         <div class="md:col-span-2">
                             <label class="mb-2 block text-sm font-medium text-gray-300">Reference Code</label>
-                            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-                                <input wire:model.defer="projectReference" type="text" placeholder="Auto-generated or enter manually" class="flex-1 rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" />
-                                <button type="button" wire:click="generateProjectReference" class="inline-flex items-center gap-2 rounded-lg border border-primary-500/40 bg-primary-500/15 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-primary-100 transition-colors hover:bg-primary-500/25">
-                                    <x-heroicon-o-sparkles class="h-4 w-4" />
-                                    Generate
-                                </button>
-                            </div>
+                            <input wire:model.defer="projectReference" type="text" readonly class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" />
                             @error('projectReference') <span class="text-xs text-red-400">{{ $message }}</span> @enderror
                         </div>
                         <div class="md:col-span-2">
                             <label class="mb-2 block text-sm font-medium text-gray-300">Project Name</label>
-                            <input wire:model.defer="projectName" type="text" placeholder="Enter project name" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" />
+                            <input wire:model.defer="projectName" type="text" placeholder="Enter project name" required class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" />
                             @error('projectName') <span class="text-xs text-red-400">{{ $message }}</span> @enderror
                         </div>
                         <div>
@@ -1779,7 +1586,7 @@
                         </div>
                         <div>
                             <label class="mb-2 block text-sm font-medium text-gray-300">Job Type</label>
-                            <select wire:model="projectJobType" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40">
+                            <select wire:model="projectJobType" required class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40">
                                 <option value="">Select job type...</option>
                                 <option value="installation">Installation</option>
                                 <option value="service">Service</option>
@@ -1788,7 +1595,7 @@
                         </div>
                         <div>
                             <label class="mb-2 block text-sm font-medium text-gray-300">Status</label>
-                            <select wire:model="projectStatus" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40">
+                            <select wire:model="projectStatus" required class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40">
                                 @foreach(\App\Models\Project::STATUSES as $status)
                                     <option value="{{ $status }}">{{ ucfirst(str_replace('_', ' ', $status)) }}</option>
                                 @endforeach
@@ -1876,6 +1683,14 @@
                             <label class="mb-1 block text-sm font-medium text-gray-300">Branch/Location</label>
                             <input wire:model="clientBranch" type="text" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" placeholder="Enter branch or location" />
                             @error('clientBranch') <span class="text-xs text-red-400">{{ $message }}</span> @enderror
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-sm font-medium text-gray-300">Client Type</label>
+                            <select wire:model="clientType" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40">
+                                <option value="non_banking">Non-Banking</option>
+                                <option value="banking">Banking</option>
+                            </select>
+                            @error('clientType') <span class="text-xs text-red-400">{{ $message }}</span> @enderror
                         </div>
                     </div>
 

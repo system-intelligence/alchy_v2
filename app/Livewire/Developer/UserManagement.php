@@ -127,6 +127,11 @@ class UserManagement extends Component
                 session()->flash('message', 'User not found.');
                 return;
             }
+            $oldValues = [
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role,
+            ];
             $user->update([
                 'name' => $this->name,
                 'email' => $this->email,
@@ -138,8 +143,9 @@ class UserManagement extends Component
             History::create([
                 'user_id' => auth()->id(),
                 'action' => 'update',
-                'model' => 'user',
+                'model' => 'User',
                 'model_id' => $user->id,
+                'old_values' => $oldValues,
                 'changes' => [
                     'name' => $this->name,
                     'email' => $this->email,

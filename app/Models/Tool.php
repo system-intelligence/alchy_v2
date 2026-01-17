@@ -68,7 +68,7 @@ class Tool extends Model
      */
     public function getImageUrlAttribute(): string
     {
-        return $this->image_blob ?: asset('images/no-image.png');
+        return $this->image_blob ?: asset('images/image.png');
     }
 
     /**

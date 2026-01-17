@@ -9,7 +9,7 @@
         </div>
         <div class="flex-1 md:max-w-2xl">
             <div class="flex flex-col sm:flex-row gap-3">
-                <div class="flex flex-1 gap-2">
+                <div class="flex flex-1 gap-2">     
                     <input
                         type="text"
                         wire:model.debounce.400ms="search"
@@ -34,22 +34,38 @@
                     <option value="critical">Critical</option>
                     <option value="out_of_stock">Out of Stock</option>
                 </select>
+                <select
+                    wire:change="filterByCategory($event.target.value)"
+                    class="shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                >
+                    <option value="">All Locations</option>
+                    @foreach(\App\Models\Inventory::CATEGORIES as $categoryOption)
+                        <option value="{{ $categoryOption }}">{{ $categoryOption }}</option>
+                    @endforeach
+                </select>
             </div>
         </div>
         @if(auth()->user()->isSystemAdmin() || auth()->user()->isUser())
         <div class="flex gap-2">
-            @if(count($selectedItems) > 0 && auth()->user()->isSystemAdmin())
+            @if(count($selectedItems) > 0)
+            <button wire:click="addSelectedToRelease"
+                    class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 shadow-md border-2 border-green-500">
+                <x-heroicon-o-plus class="w-4 h-4" />
+                Record Release ({{ count($selectedItems) }} items)
+            </button>
+            @if(auth()->user()->isSystemAdmin())
             <button wire:click="bulkDelete"
-                    onclick="return confirm('Are you sure you want to delete {{ count($selectedItems) }} selected items?')"
                     class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded flex items-center gap-2">
                 <x-heroicon-o-trash class="w-4 h-4" />
                 Delete Selected ({{ count($selectedItems) }})
             </button>
             @endif
-            <button wire:click="openReleaseModal" class="{{ $clients->count() > 0 ? 'bg-red-500 hover:bg-red-600 cursor-pointer' : 'bg-red-400 cursor-not-allowed opacity-60' }} text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 shadow-md border-2 border-red-500" {{ $clients->count() === 0 ? 'disabled' : '' }}>
+            @else
+            <button class="bg-gray-400 cursor-not-allowed opacity-60 text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 shadow-md border-2 border-gray-400" disabled title="Select materials from the list first">
                 <x-heroicon-o-plus class="w-4 h-4" />
-                Record Release
+                Select Materials to Release
             </button>
+            @endif
             @if(auth()->user()->isSystemAdmin())
             <button wire:click="openModal" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded flex items-center gap-2">
                 <x-heroicon-o-plus class="w-4 h-4" />
@@ -57,8 +73,48 @@
             </button>
             @endif
         </div>
-        @endif
-    </div>
+    @endif
+</div>
+
+<script>
+function formatNumberInput(input) {
+    // Remove all non-digit and non-comma characters first
+    let value = input.value.replace(/[^\d,]/g, '');
+
+    // Remove existing commas to get clean number
+    let cleanValue = value.replace(/,/g, '');
+
+    // Format with commas using regex
+    if (cleanValue) {
+        cleanValue = cleanValue.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+
+    // Update the input value
+    input.value = cleanValue;
+}
+
+function formatDecimalInput(input) {
+    // Remove all non-digit, non-comma, and non-decimal characters except first dot
+    let value = input.value.replace(/[^\d,.\s]/g, '');
+    let parts = value.split('.');
+    if (parts.length > 2) {
+        value = parts[0] + '.' + parts.slice(1).join('');
+    }
+
+    // Format the integer part with commas
+    if (value) {
+        let [integerPart, decimalPart] = value.split('.');
+        // Remove commas from integer part first
+        integerPart = integerPart.replace(/,/g, '');
+        // Add commas back
+        integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        value = decimalPart !== undefined ? integerPart + '.' + decimalPart : integerPart;
+    }
+
+    // Update the input value
+    input.value = value;
+}
+</script>
 
     @if (session()->has('message'))
         <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
@@ -71,7 +127,7 @@
             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead class="bg-gray-50 dark:bg-gray-700">
                     <tr>
-                        @if(auth()->user()->isSystemAdmin())
+                        @if(auth()->user()->isSystemAdmin() || auth()->user()->isUser())
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                             <input type="checkbox" wire:model.live="selectAll" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
                         </th>
@@ -90,7 +146,7 @@
                 <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     @forelse($inventories as $index => $inventory)
                         <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
-                            @if(auth()->user()->isSystemAdmin())
+                            @if(auth()->user()->isSystemAdmin() || auth()->user()->isUser())
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <input type="checkbox"
                                        wire:model.live="selectedItems"
@@ -101,8 +157,8 @@
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{{ $index + 1 }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ $inventory->brand }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ $inventory->description }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ ucwords(strtolower($inventory->category)) }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ $inventory->quantity }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ $inventory->category }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ number_format($inventory->quantity, 0, '.', ',') }}</td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 @php
                                     $statusEnum = $inventory->status instanceof InventoryStatus
@@ -168,39 +224,34 @@
 
                         <div>
                             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Project</label>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                                @if(empty($client_id))
+                                    💡 Select a client first to see available projects
+                                @elseif(empty($projects))
+                                    ⚠️ No projects found for this client
+                                @else
+                                    ✅ Projects loaded for selected client
+                                @endif
+                            </p>
                             <select wire:model="project_id" class="w-full shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none focus:shadow-outline" @if(empty($projects)) disabled @endif>
-                                <option value="">Select project...</option>
+                                <option value="">
+                                    @if(empty($client_id))
+                                        Select a client first...
+                                    @elseif(empty($projects))
+                                        No projects available
+                                    @else
+                                        Select project...
+                                    @endif
+                                </option>
                                 @forelse($projects as $project)
                                     <option value="{{ $project['id'] }}">{{ $project['name'] }} — {{ $project['reference_code'] }}</option>
                                 @empty
-                                    <option disabled>No projects available for this client</option>
+                                    <option disabled>No projects available</option>
                                 @endforelse
                             </select>
                             @error('project_id') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                         </div>
 
-                        <!-- Add Material Section -->
-                        <div class="border-t pt-4">
-                            <h4 class="text-md font-medium text-gray-900 dark:text-white mb-3">Add Materials</h4>
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Material</label>
-                                    <select wire:model="selectedInventoryId" class="w-full shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none focus:shadow-outline">
-                                        <option value="">Select material...</option>
-                                        @foreach($inventoryOptions as $item)
-                                            <option value="{{ $item->id }}">{{ $item->brand }} — {{ \Illuminate\Support\Str::limit($item->description, 30) }} (Stock: {{ $item->quantity }})</option>
-                                        @endforeach
-                                    </select>
-                                    @error('selectedInventoryId') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
-                                </div>
-                                <div>
-                                    <button type="button" wire:click="addReleaseItem" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded flex items-center gap-2">
-                                        <x-heroicon-o-plus class="w-4 h-4" />
-                                        Add Material
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
 
                         <!-- Selected Materials Table -->
                         @if(count($releaseItems) > 0)
@@ -220,15 +271,21 @@
                                     <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                                         @foreach($releaseItems as $index => $item)
                                         <tr>
-                                            <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">{{ $item['inventory']->brand }} - {{ $item['inventory']->description }}</td>
-                                            <td class="px-4 py-2">
-                                                <input type="number" min="1" wire:model="releaseItems.{{ $index }}.quantity_used" class="w-20 shadow appearance-none border rounded py-1 px-2 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none" />
+                                            <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">
+                                                @if(isset($item['inventory']) && $item['inventory'])
+                                                    {{ $item['inventory']->brand }} - {{ $item['inventory']->description }}
+                                                @else
+                                                    Unknown Material (ID: {{ $item['inventory_id'] ?? 'N/A' }})
+                                                @endif
                                             </td>
                                             <td class="px-4 py-2">
-                                                <input type="number" min="0" step="0.01" wire:model="releaseItems.{{ $index }}.cost_per_unit" class="w-24 shadow appearance-none border rounded py-1 px-2 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none" />
+                                                <input type="text" inputmode="numeric" pattern="[0-9,]*" wire:model="releaseItems.{{ $index }}.quantity_used" class="w-24 shadow appearance-none border rounded py-1 px-2 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none" onblur="formatNumberInput(this)" />
+                                            </td>
+                                            <td class="px-4 py-2">
+                                                <input type="text" inputmode="decimal" pattern="[0-9,]*\.?[0-9,]*" wire:model="releaseItems.{{ $index }}.cost_per_unit" class="w-24 shadow appearance-none border rounded py-1 px-2 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none" onblur="formatDecimalInput(this)" />
                                             </td>
                                             <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">
-                                                ₱{{ number_format(($item['quantity_used'] ?? 0) * ($item['cost_per_unit'] ?? 0), 2) }}
+                                                ₱{{ number_format((float)str_replace(',', '', $item['quantity_used'] ?? '0') * (float)str_replace(',', '', $item['cost_per_unit'] ?? '0'), 2) }}
                                             </td>
                                             <td class="px-4 py-2">
                                                 <button type="button" wire:click="removeReleaseItem({{ $index }})" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">
@@ -245,8 +302,17 @@
                         @endif
 
                         <div class="flex items-center justify-between border-t pt-4">
-                            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded">Save Release</button>
-                            <button type="button" wire:click="closeModal" class="bg-gray-500 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded">Cancel</button>
+                            <div class="text-sm text-gray-600 dark:text-gray-400">
+                                @if(count($releaseItems) === 0)
+                                    <span class="text-gray-500">No materials added yet</span>
+                                @else
+                                    <span class="text-green-600">✓ {{ count($releaseItems) }} material(s) ready for release</span>
+                                @endif
+                            </div>
+                            <div class="flex gap-2">
+                                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded">Save Release</button>
+                                <button type="button" wire:click="closeModal" class="bg-gray-500 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded">Cancel</button>
+                            </div>
                         </div>
                     </form>
                 </div>
@@ -295,55 +361,77 @@
         </div>
     @endif
 
+    <!-- Bulk Delete Inventory Modal -->
+    @if($showBulkDeleteModal)
+        <div class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50" id="bulk-delete-inventory-modal">
+            <div class="p-5 border w-11/12 max-w-md shadow-lg rounded-md bg-white dark:bg-gray-800">
+                <div class="mt-3">
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Delete Inventory Items</h3>
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                        Are you sure you want to delete {{ count($selectedItems) }} selected inventory items? This action cannot be undone.
+                    </p>
+                    <form wire:submit.prevent="confirmBulkDelete" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Enter your password to confirm</label>
+                            <input type="password" wire:model="bulkDeletePassword" class="w-full shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none focus:shadow-outline" />
+                            @error('bulkDeletePassword') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded">Delete Items</button>
+                            <button type="button" wire:click="closeModal" class="bg-gray-500 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    @endif
+
     <!-- Modal -->
     @if($showModal)
         <div class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50" id="my-modal">
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-                <div class="p-6">
-                    <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-6">{{ $editing ? 'Edit Inventory' : 'Add Inventory' }}</h3>
-                    <form wire:submit.prevent="save" class="space-y-6">
-                        <!-- Image Upload Section -->
-                        <div class="flex flex-col items-center justify-center mb-6">
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">Inventory Image</label>
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[90vw] h-[80vh] mx-auto overflow-hidden">
+                <div class="p-6 h-full flex flex-col">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-semibold text-gray-900 dark:text-white">{{ $editing ? 'Edit Inventory Item' : 'Add Inventory' }}</h3>
+                        <button type="button" wire:click="closeModal" class="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                            <x-heroicon-o-x-mark class="w-6 h-6" />
+                        </button>
+                    </div>
+                    @if(!$editing)
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">This is a physical count to ensure inventory accuracy.</p>
+                    @endif
 
-                            <!-- Upload Area -->
-                            <div class="w-full max-w-sm">
-                                <div class="relative border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center hover:border-blue-400 dark:hover:border-blue-500 transition-colors cursor-pointer bg-gray-50 dark:bg-gray-800/50 hover:bg-blue-50 dark:hover:bg-blue-900/20">
-                                    @if($image)
-                                        <img src="{{ $image->temporaryUrl() }}" alt="Image preview" class="w-16 h-16 rounded-lg object-cover mx-auto mb-3 border border-gray-200 dark:border-gray-700">
-                                    @elseif($editing && $inventoryId)
-                                        @php
-                                            $inventory = \App\Models\Inventory::find($inventoryId);
-                                        @endphp
-                                        @if($inventory && $inventory->hasImageBlob())
-                                            <img src="{{ $inventory->image_url }}" alt="Current image" class="w-16 h-16 rounded-lg object-cover mx-auto mb-3 border border-gray-200 dark:border-gray-700">
-                                        @else
-                                            <div class="w-16 h-16 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center mx-auto mb-3">
-                                                <x-heroicon-o-photo class="w-8 h-8 text-gray-500 dark:text-gray-400" />
-                                            </div>
-                                        @endif
-                                    @else
-                                        <div class="w-16 h-16 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center mx-auto mb-3">
-                                            <x-heroicon-o-photo class="w-8 h-8 text-gray-500 dark:text-gray-400" />
-                                        </div>
-                                    @endif
-
-                                    <div class="text-center">
-                                        <x-heroicon-o-cloud-arrow-up class="w-8 h-8 text-gray-400 dark:text-gray-500 mx-auto mb-2" />
-                                        <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Upload Image</p>
-                                        <p class="text-xs text-gray-500 dark:text-gray-400">PNG, JPG up to 5MB</p>
-                                    </div>
-
-                                    <input type="file"
-                                           wire:model="image"
-                                           accept="image/png,image/jpeg,image/jpg"
-                                           class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
-                                </div>
-
-                                @error('image') <span class="text-red-500 text-xs mt-2 block">{{ $message }}</span> @enderror
-                            </div>
+                    @if($editing)
+                        <!-- Tabs -->
+                        <div class="border-b border-gray-200 dark:border-gray-700 mb-6">
+                            <nav class="-mb-px flex space-x-8">
+                                <button
+                                    wire:click="switchTab('edit')"
+                                    class="py-2 px-1 border-b-2 font-medium text-sm {{ $activeTab === 'edit' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300' }}"
+                                >
+                                    Edit Details
+                                </button>
+                                <button
+                                    wire:click="switchTab('inbound')"
+                                    class="py-2 px-1 border-b-2 font-medium text-sm {{ $activeTab === 'inbound' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300' }}"
+                                >
+                                    Inbound Inventory
+                                </button>
+                                <button
+                                    wire:click="switchTab('movements')"
+                                    class="py-2 px-1 border-b-2 font-medium text-sm {{ $activeTab === 'movements' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300' }}"
+                                >
+                                    Stock Movements
+                                </button>
+                            </nav>
                         </div>
+                    @endif
 
+                    <div class="flex-1 overflow-y-auto">
+
+                    <!-- Edit Details Tab -->
+                    @if($activeTab === 'edit')
+                        <form wire:submit.prevent="save" class="space-y-6">
                         <div class="mb-4">
                             <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="brand">Brand</label>
                             <input wire:model="brand" type="text" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="brand">
@@ -358,19 +446,26 @@
                             <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="category">Location</label>
                             <select wire:model="category" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="category">
                                 <option value="">Select location...</option>
-                                <option value="BODEGA ROOM">Bodega Room</option>
-                                <option value="ALCHY ROOM">Alchy Room</option>
+                                @foreach(\App\Models\Inventory::CATEGORIES as $categoryOption)
+                                    <option value="{{ $categoryOption }}">{{ $categoryOption }}</option>
+                                @endforeach
                             </select>
                             @error('category') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                         </div>
                         <div class="mb-4">
                             <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="quantity">Quantity</label>
-                            <input wire:model="quantity" type="number" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="quantity">
+                            @if($editing)
+                                <input wire:model="quantity" type="text" inputmode="numeric" pattern="[0-9,]*" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline bg-gray-100 dark:bg-gray-600 cursor-not-allowed" id="quantity" oninput="formatNumberInput(this)" disabled readonly title="Quantity changes should be made through the Inbound Inventory tab">
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">⚠️ Quantity can only be adjusted through the Inbound Inventory tab</p>
+                            @else
+                                <input wire:model="quantity" type="text" inputmode="numeric" pattern="[0-9,]*" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="quantity" oninput="formatNumberInput(this)">
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Enter the initial physical count for this inventory item.</p>
+                            @endif
                             @error('quantity') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                         </div>
                         <div class="mb-4">
                             <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="min_stock_level">Minimum Stock Level</label>
-                            <input wire:model="min_stock_level" type="number" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="min_stock_level">
+                            <input wire:model="min_stock_level" type="text" inputmode="numeric" pattern="[0-9,]*" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="min_stock_level" oninput="formatNumberInput(this)">
                             @error('min_stock_level') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                         </div>
                         @if($editing)
@@ -380,15 +475,123 @@
                             @error('editPassword') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                         </div>
                         @endif
-                       <div class="flex items-center justify-end space-x-3 pt-6 border-t border-gray-200 dark:border-gray-700">
-                           <button type="button" wire:click="closeModal" class="px-4 py-2 bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-200 rounded-lg font-medium transition-colors">
-                               Cancel
-                           </button>
+                       <div class="flex items-center justify-end pt-6 border-t border-gray-200 dark:border-gray-700">
                            <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
                                {{ $editing ? 'Update Inventory' : 'Create Inventory' }}
                            </button>
                        </div>
-                   </form>
+                       </form>
+                   @endif
+
+                   <!-- Inbound Inventory Tab -->
+                   @if($activeTab === 'inbound')
+                       <form wire:submit.prevent="addInboundStock" class="space-y-6">
+                           <div class="mb-4">
+                               <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="inboundQuantity">Quantity to Add</label>
+                               <input wire:model="inboundQuantity" type="text" inputmode="numeric" pattern="[0-9,]*" placeholder="Enter quantity..." class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="inboundQuantity" oninput="formatNumberInput(this)">
+                               @error('inboundQuantity') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                           </div>
+                           <div class="mb-4">
+                               <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="supplier">Supplier</label>
+                               <input wire:model="supplier" type="text" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="supplier">
+                               @error('supplier') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                           </div>
+                           <div class="mb-4">
+                               <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="dateReceived">Date Received</label>
+                               <input wire:model="dateReceived" type="date" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="dateReceived">
+                               @error('dateReceived') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                           </div>
+                           <div class="mb-4">
+                               <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="inboundNotes">Notes</label>
+                               <textarea wire:model="inboundNotes" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="inboundNotes" rows="3"></textarea>
+                               @error('inboundNotes') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                           </div>
+                           <div class="flex items-center justify-end pt-6 border-t border-gray-200 dark:border-gray-700">
+                               <button type="submit" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors">
+                                   Add Stock
+                               </button>
+                           </div>
+                       </form>
+                   @endif
+
+                   <!-- Stock Movements Tab -->
+                   @if($activeTab === 'movements')
+                       <div class="space-y-6">
+                           <!-- Filters -->
+                           <div class="flex flex-col sm:flex-row gap-4">
+                               <div class="flex-1">
+                                   <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="movementTypeFilter">Movement Type</label>
+                                   <select wire:model.live="movementTypeFilter" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="movementTypeFilter">
+                                       <option value="">All Types</option>
+                                       <option value="inbound">Inbound</option>
+                                       <option value="outbound">Outbound</option>
+                                   </select>
+                               </div>
+                               <div class="flex-1">
+                                   <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="movementDateFilter">Date</label>
+                                   <input wire:model.live="movementDateFilter" type="date" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="movementDateFilter">
+                               </div>
+                           </div>
+
+                           <!-- Movements Table -->
+                           <div class="overflow-x-auto">
+                               <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                   <thead class="bg-gray-50 dark:bg-gray-700">
+                                       <tr>
+                                           <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Date</th>
+                                           <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Type</th>
+                                           <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Change</th>
+                                           <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Before</th>
+                                           <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">After</th>
+                                           <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Cost/Unit</th>
+                                           <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Total Cost</th>
+                                           <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">User</th>
+                                           <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Notes</th>
+                                       </tr>
+                                   </thead>
+                                   <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                                       @forelse($this->getFilteredStockMovements() as $movement)
+                                       <tr>
+                                           <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">{{ $movement->created_at->format('M d, Y H:i') }}</td>
+                                           <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">{{ $movement->movement_type_display }}</td>
+                                           <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">
+                                               <span class="{{ $movement->quantity_change > 0 ? 'text-green-600' : 'text-red-600' }}">
+                                                   {{ number_format($movement->quantity_change) }}
+                                               </span>
+                                           </td>
+                                           <td class="px-4 py-2 text-sm text-red-600 dark:text-red-400">{{ number_format($movement->previous_quantity) }}</td>
+                                           <td class="px-4 py-2 text-sm text-green-600 dark:text-green-400">{{ number_format($movement->new_quantity) }}</td>
+                                           <td class="px-4 py-2 text-sm text-blue-600 dark:text-blue-400">
+                                               @if($movement->cost_per_unit)
+                                                   ₱{{ number_format($movement->cost_per_unit, 2) }}
+                                               @else
+                                                   -
+                                               @endif
+                                           </td>
+                                           <td class="px-4 py-2 text-sm text-purple-600 dark:text-purple-400">
+                                               @if($movement->total_cost)
+                                                   ₱{{ number_format($movement->total_cost, 2) }}
+                                               @else
+                                                   -
+                                               @endif
+                                           </td>
+                                           <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">{{ $movement->user ? $movement->user->name : 'Unknown' }}</td>
+                                           <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">{{ $movement->notes ?: '-' }}</td>
+                                       </tr>
+                                       @empty
+                                       <tr>
+                                           <td colspan="9" class="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-300">
+                                               No stock movements found.
+                                           </td>
+                                       </tr>
+                                       @endforelse
+                                   </tbody>
+                               </table>
+                           </div>
+
+                       </div>
+                   @endif
+                   </div>
                </div>
            </div>
        </div>
