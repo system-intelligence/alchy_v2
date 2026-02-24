@@ -90,9 +90,40 @@ class Tools extends Component
 
         // Handle image upload
         if ($this->image) {
+            // Compress and resize image to reduce size
             $imageData = file_get_contents($this->image->getRealPath());
-            $data['image_blob'] = base64_encode($imageData);
-            $data['image_mime_type'] = $this->image->getMimeType();
+            $image = imagecreatefromstring($imageData);
+            
+            if ($image) {
+                // Resize if too large (max 800px width/height)
+                $maxSize = 800;
+                $width = imagesx($image);
+                $height = imagesy($image);
+                
+                if ($width > $maxSize || $height > $maxSize) {
+                    $ratio = min($maxSize / $width, $maxSize / $height);
+                    $newWidth = (int)($width * $ratio);
+                    $newHeight = (int)($height * $ratio);
+                    
+                    $resized = imagecreatetruecolor($newWidth, $newHeight);
+                    imagecopyresampled($resized, $image, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
+                    imagedestroy($image);
+                    $image = $resized;
+                }
+                
+                // Compress to JPEG with quality setting
+                ob_start();
+                imagejpeg($image, null, 70);
+                $compressedData = ob_get_clean();
+                imagedestroy($image);
+                
+                $data['image_blob'] = base64_encode($compressedData);
+                $data['image_mime_type'] = 'image/jpeg';
+            } else {
+                // Fallback: use original if GD fails
+                $data['image_blob'] = base64_encode($imageData);
+                $data['image_mime_type'] = $this->image->getMimeType();
+            }
             $data['image_filename'] = $this->image->getClientOriginalName();
         }
 

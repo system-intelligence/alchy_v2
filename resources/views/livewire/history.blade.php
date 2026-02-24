@@ -1,4 +1,4 @@
-    <!-- livewire:multiple-root-elements -->
+        <!-- livewire:multiple-root-elements -->
 <div>
     {{-- Flash Messages --}}
     @if (session()->has('success'))
@@ -393,7 +393,7 @@
                         @endif
 
                         {{-- Action Button --}}
-                        @if(($history->action === 'create' && $history->model !== 'MaterialReleaseApproval') || (($history->action === 'update' || $history->action === 'edit' || $history->action === 'delete') && ($history->changes || $history->old_values)) || $history->action === 'Approval Request Approved' || $history->action === 'Approval Request Declined' || $history->action === 'Material Release Completed' || ($history->action === 'Inbound Stock Added' && ($history->changes || $history->old_values)) || ($history->action === 'Outbound Stock Removed' && ($history->changes || $history->old_values)) || $history->action === 'Stock Movement Recorded')
+                        @if(($history->action === 'create' && $history->model !== 'MaterialReleaseApproval') || (($history->action === 'update' || $history->action === 'edit' || $history->action === 'delete') && ($history->changes || $history->old_values)) || $history->action === 'Approval Request Approved' || $history->action === 'Approval Request Declined' || $history->action === 'Material Release Completed' || $history->action === 'Material Release Request Created' || ($history->action === 'Inbound Stock Added' && ($history->changes || $history->old_values)) || ($history->action === 'Outbound Stock Removed' && ($history->changes || $history->old_values)) || $history->action === 'Stock Movement Recorded')
                             <button wire:click="showChangeDetails({{ $history->id }})"
                                 class="w-full px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors">
                                 <x-heroicon-o-eye class="w-4 h-4 inline mr-1" />
@@ -447,7 +447,7 @@
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">{{ $history->model_name }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{{ $history->created_at->format('M d, Y - h:i A') }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                    @if(($history->action === 'create' && $history->model !== 'MaterialReleaseApproval') || (($history->action === 'update' || $history->action === 'edit' || $history->action === 'delete') && ($history->changes || $history->old_values)) || $history->action === 'Approval Request Approved' || $history->action === 'Approval Request Declined' || $history->action === 'Material Release Completed' || ($history->action === 'Inbound Stock Added' && ($history->changes || $history->old_values)) || ($history->action === 'Outbound Stock Removed' && ($history->changes || $history->old_values)) || $history->action === 'Stock Movement Recorded')
+                                    @if(($history->action === 'create' && $history->model !== 'MaterialReleaseApproval') || (($history->action === 'update' || $history->action === 'edit' || $history->action === 'delete') && ($history->changes || $history->old_values)) || $history->action === 'Approval Request Approved' || $history->action === 'Approval Request Declined' || $history->action === 'Material Release Completed' || $history->action === 'Material Release Request Created' || ($history->action === 'Inbound Stock Added' && ($history->changes || $history->old_values)) || ($history->action === 'Outbound Stock Removed' && ($history->changes || $history->old_values)) || $history->action === 'Stock Movement Recorded')
                                         <button wire:click="showChangeDetails({{ $history->id }})"
                                             class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">
                                             <x-heroicon-o-eye class="w-4 h-4 inline mr-1" />
@@ -979,12 +979,22 @@
                         @endif
 
                         {{-- Stock Movements Log for Material Release --}}
-                        @if($selectedHistory->model === 'MaterialReleaseApproval')
+                        @if($selectedHistory->model === 'MaterialReleaseApproval' || in_array($selectedHistory->action, ['Material Release Completed', 'Material Release Request Created', 'Outbound Stock Removed', 'Outbound Stock Released']))
                             @php
+                                $changes = is_array($selectedHistory->changes) ? $selectedHistory->changes : (is_string($selectedHistory->changes) ? json_decode($selectedHistory->changes, true) ?? [] : []);
                                 $approval = App\Models\MaterialReleaseApproval::with('expense')->find($selectedHistory->model_id);
                                 $stockMovements = collect();
-                                if ($approval) {
-                                    // Try by reference first
+                                
+                                // First, try to find by stock_movement_id stored in history changes
+                                if (!empty($changes['stock_movement_id'])) {
+                                    $sm = App\Models\StockMovement::with('user')->find($changes['stock_movement_id']);
+                                    if ($sm) {
+                                        $stockMovements = collect([$sm]);
+                                    }
+                                }
+                                
+                                // If not found, try by expense reference
+                                if ($stockMovements->isEmpty() && $approval) {
                                     if ($approval->expense) {
                                         $stockMovements = App\Models\StockMovement::where('reference', 'expense_' . $approval->expense->id)
                                             ->with('user')
@@ -995,10 +1005,14 @@
                                     // If no movements found by reference, try by inventory and time
                                     if ($stockMovements->isEmpty()) {
                                         $historyTime = $selectedHistory->created_at;
-                                        $stockMovements = App\Models\StockMovement::where('inventory_id', $approval->inventory_id)
+                                        $inventoryId = $changes['inventory_id'] ?? $approval->inventory_id;
+                                        $quantityRequested = $changes['quantity'] ?? $changes['quantity_released'] ?? $approval->quantity_requested ?? 0;
+                                        $requestedBy = $changes['requested_by_id'] ?? $approval->requested_by ?? $selectedHistory->user_id;
+                                        
+                                        $stockMovements = App\Models\StockMovement::where('inventory_id', $inventoryId)
                                             ->where('movement_type', 'outbound')
-                                            ->where('quantity', -$approval->quantity_requested)
-                                            ->where('user_id', $approval->requested_by)
+                                            ->where('quantity', -$quantityRequested)
+                                            ->where('user_id', $requestedBy)
                                             ->where('created_at', '>=', $historyTime->copy()->subMinutes(5))
                                             ->where('created_at', '<=', $historyTime->copy()->addMinutes(5))
                                             ->with('user')
@@ -1035,10 +1049,30 @@
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Total Cost</th>
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">User</th>
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Notes</th>
+                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Project</th>
                                                 </tr>
                                             </thead>
                                             <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                                                 @foreach($stockMovements as $movement)
+                                                    @php
+                                                        $projectInfo = '-';
+                                                        $clientInfo = '-';
+                                                        if ($movement->reference && str_starts_with($movement->reference, 'expense_')) {
+                                                            $expenseId = str_replace('expense_', '', $movement->reference);
+                                                            $linkedExpense = \App\Models\Expense::with(['project', 'client'])->find($expenseId);
+                                                            if ($linkedExpense) {
+                                                                $projectInfo = $linkedExpense->project->name ?? '-';
+                                                                $clientInfo = $linkedExpense->client->name ?? '-';
+                                                            }
+                                                        }
+                                                        if ($projectInfo === '-' && isset($changes['project_name'])) {
+                                                            $projectInfo = $changes['project_name'];
+                                                        }
+                                                        if ($clientInfo === '-' && isset($changes['client_name'])) {
+                                                            $clientInfo = $changes['client_name'];
+                                                        }
+                                                        $approvedBy = $changes['approved_by'] ?? '-';
+                                                    @endphp
                                                     <tr>
                                                         <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">{{ $movement->created_at->format('M d, Y H:i') }}</td>
                                                         <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">{{ $movement->movement_type_display }}</td>
@@ -1053,26 +1087,106 @@
                                                             @if($movement->cost_per_unit)
                                                                 ₱{{ number_format($movement->cost_per_unit, 2) }}
                                                             @else
-                                                                -
+                                                                ₱0.00
                                                             @endif
                                                         </td>
                                                         <td class="px-4 py-2 text-sm text-purple-600 dark:text-purple-400">
                                                             @if($movement->total_cost)
                                                                 ₱{{ number_format($movement->total_cost, 2) }}
                                                             @else
-                                                                -
+                                                                ₱0.00
                                                             @endif
                                                         </td>
                                                         <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">{{ $movement->user ? $movement->user->name : 'Unknown' }}</td>
                                                         <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">
                                                             @if($movement->notes)
-                                                                {!! nl2br(str_replace(' - ', '<br>', $movement->notes)) !!}
+                                                                {!! nl2br(e($movement->notes)) !!}
+                                                            @else
+                                                                -
+                                                            @endif
+                                                        </td>
+                                                        <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">
+                                                            @if($clientInfo !== '-' || $projectInfo !== '-')
+                                                                @if($clientInfo !== '-')
+                                                                    <div class="text-xs"><span class="font-semibold">Client:</span> {{ $clientInfo }}</div>
+                                                                @endif
+                                                                @if($projectInfo !== '-')
+                                                                    <div class="text-xs"><span class="font-semibold">Project:</span> {{ $projectInfo }}</div>
+                                                                @endif
                                                             @else
                                                                 -
                                                             @endif
                                                         </td>
                                                     </tr>
                                                 @endforeach
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            @elseif($selectedHistory->action === 'Material Release Completed' || $selectedHistory->action === 'Material Release Request Created' || !empty($changes['material_brand']) || !empty($changes['inventory_id']))
+                                {{-- Fallback: Show from history changes if no stock movement record --}}
+                                <div class="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-6 mt-6">
+                                    <div class="mb-4">
+                                        <h3 class="text-lg font-semibold text-blue-900 dark:text-blue-100">
+                                            <x-heroicon-o-queue-list class="w-5 h-5 inline mr-2" />
+                                            Stock Movements Log
+                                        </h3>
+                                    </div>
+                                    <div class="overflow-x-auto">
+                                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                            <thead class="bg-gray-50 dark:bg-gray-700">
+                                                <tr>
+                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Date</th>
+                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Type</th>
+                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Change</th>
+                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Before</th>
+                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">After</th>
+                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Cost/Unit</th>
+                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Total Cost</th>
+                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">User</th>
+                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Notes</th>
+                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Project</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                                                @php
+                                                    $qty = $changes['quantity'] ?? $changes['quantity_released'] ?? 0;
+                                                    $prevQty = $changes['previous_quantity'] ?? 0;
+                                                    $newQty = $changes['new_quantity'] ?? 0;
+                                                    $cpu = $changes['cost_per_unit'] ?? 0;
+                                                    $tc = $changes['total_cost'] ?? ($qty * $cpu);
+                                                    $reqBy = $changes['requested_by'] ?? $selectedHistory->user->name ?? 'Unknown';
+                                                    $apprBy = $changes['approved_by'] ?? '-';
+                                                    $rsn = $changes['reason'] ?? '-';
+                                                    $pName = $changes['project_name'] ?? $changes['project'] ?? '-';
+                                                    $cName = $changes['client_name'] ?? $changes['client'] ?? '-';
+                                                    $materialBrand = $changes['material_brand'] ?? '-';
+                                                @endphp
+                                                <tr>
+                                                    <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">{{ $selectedHistory->created_at->format('M d, Y H:i') }}</td>
+                                                    <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">
+                                                        <span class="text-red-600 dark:text-red-400 font-medium">OUTBOUND</span>
+                                                    </td>
+                                                    <td class="px-4 py-2 text-sm text-red-600">-{{ number_format(abs($qty)) }}</td>
+                                                    <td class="px-4 py-2 text-sm text-red-600 dark:text-red-400">{{ is_numeric($prevQty) ? number_format($prevQty) : $prevQty }}</td>
+                                                    <td class="px-4 py-2 text-sm text-green-600 dark:text-green-400">{{ is_numeric($newQty) ? number_format($newQty) : $newQty }}</td>
+                                                    <td class="px-4 py-2 text-sm text-blue-600 dark:text-blue-400">₱{{ number_format($cpu, 2) }}</td>
+                                                    <td class="px-4 py-2 text-sm text-purple-600 dark:text-purple-400">₱{{ number_format($tc, 2) }}</td>
+                                                    <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">{{ $reqBy }}</td>
+                                                    <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">{{ $rsn }}</td>
+                                                    <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">
+                                                        @if($cName !== '-' || $pName !== '-')
+                                                            @if($cName !== '-')
+                                                                <div class="text-xs"><span class="font-semibold">Client:</span> {{ $cName }}</div>
+                                                            @endif
+                                                            @if($pName !== '-')
+                                                                <div class="text-xs"><span class="font-semibold">Project:</span> {{ $pName }}</div>
+                                                            @endif
+                                                        @else
+                                                            -
+                                                        @endif
+                                                    </td>
+                                                </tr>
                                             </tbody>
                                         </table>
                                     </div>

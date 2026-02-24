@@ -32,7 +32,20 @@ class History extends Component
     {
         $user = auth()->user();
 
-        $query = HistoryModel::with('user');
+        $query = HistoryModel::with([
+            'user',
+            'approvalRelation' => function ($q) {
+                $q->with(['requester', 'reviewer', 'inventory', 'expense', 'expense.client', 'expense.project']);
+            },
+            'expenseRelation' => function ($q) {
+                $q->with(['client', 'project', 'inventory']);
+            },
+            'projectRelation' => function ($q) {
+                $q->with(['client']);
+            },
+            'clientRelation',
+            'inventoryRelation'
+        ]);
 
         // Apply role-based filtering
         if ($user->role === 'system_admin') {
@@ -192,7 +205,20 @@ class History extends Component
 
     public function showChangeDetails($historyId)
     {
-        $this->selectedHistory = HistoryModel::find($historyId);
+        $this->selectedHistory = HistoryModel::with([
+            'user',
+            'approvalRelation' => function ($q) {
+                $q->with(['requester', 'reviewer', 'inventory', 'expense', 'expense.client', 'expense.project']);
+            },
+            'expenseRelation' => function ($q) {
+                $q->with(['client', 'project', 'inventory']);
+            },
+            'projectRelation' => function ($q) {
+                $q->with(['client']);
+            },
+            'clientRelation',
+            'inventoryRelation'
+        ])->find($historyId);
         $this->showChangeModal = true;
     }
 

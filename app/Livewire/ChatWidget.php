@@ -8,6 +8,7 @@ use App\Models\MaterialReleaseApproval;
 use App\Models\Inventory;
 use App\Models\Expense;
 use App\Models\History;
+use App\Models\StockMovement;
 use App\Notifications\NewMessagePush;
 use App\Events\ApprovalActionTaken;
 use App\Events\HistoryEntryCreated;
@@ -461,12 +462,21 @@ class ChatWidget extends Component
 
             // Deduct from inventory
             $oldQuantity = $inventory->quantity;
-            $inventory->quantity -= $approval->quantity_requested;
+            $newQuantity = $inventory->quantity - $approval->quantity_requested;
+            
+            // Determine cost per unit (default to 0 since not stored in approval)
+            $costPerUnit = 0.00;
+            $totalCost = round($approval->quantity_requested * $costPerUnit, 2);
             
             // Update inventory status if quantity is 0
-            if ($inventory->quantity == 0) {
-                $inventory->inventory_status = \App\Enums\InventoryStatus::OUT_OF_STOCK;
-            }
+            $newStatus = $newQuantity <= 0
+                ? \App\Enums\InventoryStatus::OUT_OF_STOCK
+                : ($newQuantity <= $inventory->min_stock_level
+                    ? \App\Enums\InventoryStatus::CRITICAL
+                    : \App\Enums\InventoryStatus::NORMAL);
+            
+            $inventory->quantity = $newQuantity;
+            $inventory->status = $newStatus->value;
             
             $saved = $inventory->save();
             Log::info('Inventory saved', [
@@ -475,86 +485,134 @@ class ChatWidget extends Component
                 'new_quantity' => $inventory->quantity
             ]);
 
-            // Create expense record if expense_id exists
-            if ($approval->expense_id) {
-                $expense = $approval->expense;
-                if ($expense) {
-                    Log::info('Updating expense record', ['expense_id' => $expense->id]);
-                    $expense->quantity_released = ($expense->quantity_released ?? 0) + $approval->quantity_requested;
-                    $expense->save();
-                    Log::info('Expense updated', ['new_quantity_released' => $expense->quantity_released]);
-                }
-            }
-
-            // Create history entry for outbound stock removal
-            \App\Models\History::create([
-                'user_id' => auth()->id(),
-                'action' => 'Outbound Stock Removed',
-                'model' => 'inventory',
-                'model_id' => $inventory->id,
-                'old_values' => [
-                    'quantity' => $oldQuantity,
-                ],
-                'changes' => [
-                    'quantity' => -$approval->quantity_requested,
-                    'notes' => "Released to client: {$approval->client}",
-                    'reference' => 'expense_' . ($expense->id ?? 'unknown'),
-                ],
+            // Create expense record for this release
+            $expense = Expense::create([
+                'client_id' => null,
+                'inventory_id' => $inventory->id,
+                'project_id' => null,
+                'quantity_used' => $approval->quantity_requested,
+                'cost_per_unit' => $costPerUnit,
+                'total_cost' => $totalCost,
+                'released_at' => now(),
+                'notes' => $approval->reason ?? 'Approved from chat',
             ]);
-            Log::info('Outbound stock history created');
+            
+            // Update approval with expense_id
+            $approval->update(['expense_id' => $expense->id]);
+            Log::info('Expense created', ['expense_id' => $expense->id]);
+
+            // Record complete Stock Movement entry
+            // Use the requester's ID for consistency with approval workflow
+            $stockMovement = StockMovement::create([
+                'inventory_id' => $inventory->id,
+                'user_id' => $approval->requested_by, // Use requester ID for proper tracking
+                'movement_type' => 'outbound',
+                'quantity' => -$approval->quantity_requested, // Negative for outbound
+                'cost_per_unit' => $costPerUnit,
+                'total_cost' => $totalCost,
+                'previous_quantity' => $oldQuantity,
+                'new_quantity' => $newQuantity,
+                'location' => $inventory->category,
+                'notes' => "Approved from chat by " . auth()->user()->name . " - " . ($approval->reason ?? 'Material release'),
+                'reference' => 'expense_' . $expense->id,
+                'date_received' => now()->toDateString(),
+            ]);
+            Log::info('StockMovement created', [
+                'movement_id' => $stockMovement->id,
+                'inventory_id' => $inventory->id,
+                'quantity_change' => -$approval->quantity_requested,
+                'previous_quantity' => $oldQuantity,
+                'new_quantity' => $newQuantity,
+                'cost_per_unit' => $costPerUnit,
+                'total_cost' => $totalCost,
+            ]);
 
             // Update existing history entry or create new
             $existingHistory = History::where('model', 'MaterialReleaseApproval')
                 ->where('model_id', $approval->id)
                 ->first();
 
-            if ($existingHistory) {
-                // Update existing history with completion details
-                $changes = [
-                    'status' => 'approved',
-                    'project' => $approval->project ?? 'N/A',
-                    'client' => $approval->client ?? 'N/A',
-                    'material' => $inventory->material_name,
-                    'quantity' => $approval->quantity_requested,
-                    'approved_by' => auth()->user()->name,
-                    'completed_at' => now()->toDateTimeString(),
-                ];
+            // Prepare comprehensive history data with complete stock movement info
+            $historyData = [
+                // Release identification
+                'release_type' => 'approval_based_release',
+                'approval_id' => $approval->id,
+                
+                // Status
+                'status' => 'approved',
+                'approval_status' => 'approved',
+                
+                // Client and Project information
+                'client' => $approval->client ?? 'N/A',
+                'client_name' => $approval->client ?? 'N/A',
+                'project' => $approval->project ?? 'N/A',
+                'project_name' => $approval->project ?? 'N/A',
+                
+                // Material/Inventory information
+                'material' => $inventory->material_name,
+                'material_brand' => $inventory->brand,
+                'material_description' => $inventory->description,
+                'material_category' => $inventory->category,
+                
+                // Quantity information
+                'quantity' => $approval->quantity_requested,
+                'quantity_released' => $approval->quantity_requested,
+                
+                // Stock movement details
+                'previous_quantity' => $oldQuantity,
+                'new_quantity' => $newQuantity,
+                'cost_per_unit' => $costPerUnit,
+                'total_cost' => $totalCost,
+                'stock_movement_id' => $stockMovement->id,
+                
+                // User information
+                'requested_by' => $approval->requester?->name,
+                'requested_by_id' => $approval->requested_by,
+                'approved_by' => auth()->user()->name,
+                'approved_by_id' => auth()->id(),
+                
+                // Timestamps
+                'requested_at' => $approval->created_at?->toDateTimeString(),
+                'completed_at' => now()->toDateTimeString(),
+                'reviewed_at' => now()->toDateTimeString(),
+                
+                // Additional details
+                'reason' => $approval->reason,
+                'review_notes' => 'Approved from chat',
+            ];
 
-                if (auth()->id() === $approval->requested_by) {
-                    $changes['auto_approved'] = true;
-                }
+            // Mark as auto-approved if approver is the requester
+            if (auth()->id() === $approval->requested_by) {
+                $historyData['auto_approved'] = true;
+            }
+
+            if ($existingHistory) {
+                // Merge with existing data
+                $existingChanges = is_array($existingHistory->changes) ? $existingHistory->changes : json_decode($existingHistory->changes ?? '[]', true);
+                $updatedChanges = array_merge($existingChanges, $historyData);
 
                 $existingHistory->update([
                     'action' => 'Material Release Completed',
-                    'changes' => json_encode($changes),
+                    'changes' => $updatedChanges,
+                    'old_values' => [
+                        'status' => 'pending',
+                        'inventory_quantity' => $oldQuantity,
+                    ],
                 ]);
                 $approvalHistory = $existingHistory;
                 Log::info('Approval history updated', ['history_id' => $approvalHistory->id]);
             } else {
                 // Create new if not found
-                $changes = [
-                    'status' => 'approved',
-                    'project' => $approval->project ?? 'N/A',
-                    'client' => $approval->client ?? 'N/A',
-                    'material' => $inventory->material_name,
-                    'quantity' => $approval->quantity_requested,
-                    'approved_by' => auth()->user()->name,
-                    'completed_at' => now()->toDateTimeString(),
-                ];
-
-                if (auth()->id() === $approval->requested_by) {
-                    $changes['auto_approved'] = true;
-                }
-
                 $approvalHistory = History::create([
                     'user_id' => $approval->requested_by,
                     'action' => 'Material Release Completed',
                     'model' => 'MaterialReleaseApproval',
                     'model_id' => $approval->id,
-                    'changes' => json_encode($changes),
-                    'old_values' => json_encode([
-                        'status' => 'pending'
-                    ])
+                    'changes' => $historyData,
+                    'old_values' => [
+                        'status' => 'pending',
+                        'inventory_quantity' => $oldQuantity,
+                    ],
                 ]);
                 Log::info('Approval history created', ['history_id' => $approvalHistory->id]);
             }

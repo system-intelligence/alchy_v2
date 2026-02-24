@@ -145,9 +145,13 @@ function formatDecimalInput(input) {
                 </thead>
                 <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     @forelse($inventories as $index => $inventory)
-                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        @php
+                            $isSelected = in_array($inventory->id, $selectedItems);
+                        @endphp
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors {{ $isSelected ? 'bg-orange-100 dark:bg-orange-900/40' : '' }}"
+                            wire:click="toggleItemSelection({{ $inventory->id }})">
                             @if(auth()->user()->isSystemAdmin() || auth()->user()->isUser())
-                            <td class="px-6 py-4 whitespace-nowrap">
+                            <td class="px-6 py-4 whitespace-nowrap" wire:click.stop>
                                 <input type="checkbox"
                                        wire:model.live="selectedItems"
                                        value="{{ $inventory->id }}"
@@ -263,8 +267,10 @@ function formatDecimalInput(input) {
                                         <tr>
                                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Material</th>
                                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Quantity</th>
+                                            @if(auth()->user()->isSystemAdmin())
                                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Cost per Unit</th>
                                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Total</th>
+                                            @endif
                                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Actions</th>
                                         </tr>
                                     </thead>
@@ -281,12 +287,14 @@ function formatDecimalInput(input) {
                                             <td class="px-4 py-2">
                                                 <input type="text" inputmode="numeric" pattern="[0-9,]*" wire:model="releaseItems.{{ $index }}.quantity_used" class="w-24 shadow appearance-none border rounded py-1 px-2 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none" onblur="formatNumberInput(this)" />
                                             </td>
+                                            @if(auth()->user()->isSystemAdmin())
                                             <td class="px-4 py-2">
                                                 <input type="text" inputmode="decimal" pattern="[0-9,]*\.?[0-9,]*" wire:model="releaseItems.{{ $index }}.cost_per_unit" class="w-24 shadow appearance-none border rounded py-1 px-2 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none" onblur="formatDecimalInput(this)" />
                                             </td>
                                             <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">
                                                 ₱{{ number_format((float)str_replace(',', '', $item['quantity_used'] ?? '0') * (float)str_replace(',', '', $item['cost_per_unit'] ?? '0'), 2) }}
                                             </td>
+                                            @endif
                                             <td class="px-4 py-2">
                                                 <button type="button" wire:click="removeReleaseItem({{ $index }})" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">
                                                     <x-heroicon-o-trash class="w-4 h-4" />

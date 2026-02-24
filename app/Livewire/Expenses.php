@@ -995,15 +995,50 @@ class Expenses extends Component
                     'action' => 'Material Release Request Created',
                     'model' => 'MaterialReleaseApproval',
                     'model_id' => $approval->id,
-                    'changes' => json_encode([
+                    'changes' => [
+                        // Release identification
+                        'release_type' => 'approval_based_release',
+                        'approval_id' => $approval->id,
+                        
+                        // Status
                         'status' => 'pending',
-                        'project' => $project->reference_code,
+                        'approval_status' => 'pending',
+                        
+                        // Client and Project information
+                        'client' => $project->client?->name,
+                        'client_name' => $project->client?->name,
+                        'project' => $project->name,
+                        'project_name' => $project->name,
+                        'project_reference_code' => $project->reference_code,
+                        
+                        // Material/Inventory information
                         'material' => $inventory->material_name,
+                        'material_brand' => $inventory->brand,
+                        'material_description' => $inventory->description,
+                        'material_category' => $inventory->category,
+                        'inventory_id' => $inventory->id,
+                        
+                        // Quantity and cost information
                         'quantity' => $item['quantity'],
+                        'quantity_requested' => $item['quantity'],
                         'cost_per_unit' => $item['cost_per_unit'],
+                        'total_cost' => round($item['quantity'] * $item['cost_per_unit'], 2),
+                        
+                        // Stock levels (projected)
+                        'previous_quantity' => $inventory->quantity,
+                        'new_quantity' => max(0, $inventory->quantity - $item['quantity']),
+                        
+                        // User information - IMPORTANT: Capture requester name
+                        'requested_by' => auth()->user()->name,
+                        'requested_by_id' => auth()->id(),
+                        'requester' => auth()->user()->name,
+                        
+                        // Reason
                         'reason' => $this->manageReleaseNotes,
+                        
+                        // Timestamps
                         'requested_at' => now()->toDateTimeString(),
-                    ]),
+                    ],
                 ]);
             }
 
@@ -1121,6 +1156,7 @@ class Expenses extends Component
         Carbon $releasedAt
     ): void {
         $totalCost = round($item['quantity'] * $item['cost_per_unit'], 2);
+        $previousQuantity = $inventory->quantity;
 
         $expense = Expense::create([
             'client_id' => $project->client_id,
@@ -1146,31 +1182,69 @@ class Expenses extends Component
             'status' => $newStatus->value,
         ]);
 
-        History::create([
-            'user_id' => auth()->id(),
-            'action' => 'create',
-            'model' => 'expense',
-            'model_id' => $expense->id,
-            'changes' => array_filter([
-                'client_id' => $expense->client_id,
-                'inventory_id' => $expense->inventory_id,
-                'project_id' => $expense->project_id,
-                'quantity_used' => $expense->quantity_used,
-                'cost_per_unit' => $expense->cost_per_unit,
-                'total_cost' => $expense->total_cost,
-                'notes' => $expense->notes,
-            ], fn ($value) => $value !== null),
-        ]);
+        // Record outbound stock movement
+        $notes = $this->manageReleaseNotes ?: "Material release for project {$project->reference_code}";
+        $stockMovement = $inventory->recordStockMovement('outbound', $item['quantity'], auth()->id(), [
+            'reference' => 'expense_' . $expense->id,
+            'cost_per_unit' => $item['cost_per_unit'],
+            'total_cost' => $totalCost,
+            'notes' => $notes,
+            'location' => $inventory->category,
+        ], $previousQuantity);
 
+        // Create comprehensive Material Release history entry with complete stock movement info
         History::create([
             'user_id' => auth()->id(),
-            'action' => 'update',
-            'model' => 'inventory',
-            'model_id' => $inventory->id,
-            'old_values' => $oldInventoryValues,
+            'action' => 'Material Release Completed',
+            'model' => 'MaterialReleaseApproval',
+            'model_id' => $expense->id,
             'changes' => [
-                'quantity' => $newQuantity,
-                'status' => $newStatus->value,
+                // Release type
+                'release_type' => 'direct_release',
+                
+                // Status (completed/approved)
+                'status' => 'approved',
+                'approval_status' => 'approved',
+                
+                // Client and Project
+                'client' => $project->client?->name,
+                'client_name' => $project->client?->name,
+                'project' => $project->name,
+                'project_name' => $project->name,
+                'project_reference_code' => $project->reference_code,
+                
+                // Material information
+                'inventory_id' => $inventory->id,
+                'material_brand' => $inventory->brand,
+                'material_description' => $inventory->description,
+                'material_category' => $inventory->category,
+                
+                // Quantity information
+                'quantity' => $item['quantity'],
+                'quantity_released' => $item['quantity'],
+                
+                // Stock movement details
+                'previous_quantity' => $previousQuantity,
+                'new_quantity' => $newQuantity,
+                'cost_per_unit' => $item['cost_per_unit'],
+                'total_cost' => $totalCost,
+                'stock_movement_id' => $stockMovement->id,
+                
+                // User information (self-release by system admin)
+                'requested_by' => auth()->user()->name,
+                'requested_by_id' => auth()->id(),
+                'approved_by' => auth()->user()->name, // Same person for direct release
+                'approved_by_id' => auth()->id(),
+                'auto_approved' => true,
+                
+                // Timestamps
+                'completed_at' => now()->toDateTimeString(),
+                
+                // Additional details
+                'reason' => $notes,
+            ],
+            'old_values' => [
+                'quantity' => $previousQuantity,
             ],
         ]);
     }

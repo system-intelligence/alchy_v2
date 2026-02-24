@@ -428,8 +428,62 @@ class Masterlist extends Component
                 if ($autoApprove) {
                     $this->processAutoApprovedRelease($approval, $item, $inventory, $client);
                 } else {
-                    // For regular users, only broadcast the approval request event
-                    // History will be created when approval is actually processed
+                    // Create history entry for pending approval request
+                    // Capture current stock levels BEFORE any changes
+                    $previousQuantity = $inventory->quantity;
+                    $newQuantity = max(0, $previousQuantity - $item['quantity_used']);
+                    
+                    History::create([
+                        'user_id' => auth()->id(),
+                        'action' => 'Material Release Request Created',
+                        'model' => 'MaterialReleaseApproval',
+                        'model_id' => $approval->id,
+                        'changes' => [
+                            // Release identification
+                            'release_type' => 'approval_based_release',
+                            'approval_id' => $approval->id,
+                            
+                            // Status
+                            'status' => 'pending',
+                            'approval_status' => 'pending',
+                            
+                            // Client and Project information
+                            'client' => $approval->client ?? $client->name ?? 'N/A',
+                            'client_name' => $approval->client ?? $client->name ?? 'N/A',
+                            'project' => $approval->project ?? ($this->project_id ? Project::find($this->project_id)?->name : 'N/A'),
+                            'project_name' => $approval->project ?? ($this->project_id ? Project::find($this->project_id)?->name : 'N/A'),
+                            
+                            // Material/Inventory information
+                            'material' => $inventory->material_name,
+                            'material_brand' => $inventory->brand,
+                            'material_description' => $inventory->description,
+                            'material_category' => $inventory->category,
+                            'inventory_id' => $inventory->id,
+                            
+                            // Quantity and cost information
+                            'quantity' => $item['quantity_used'],
+                            'quantity_requested' => $item['quantity_used'],
+                            'cost_per_unit' => $item['cost_per_unit'],
+                            'total_cost' => round($item['quantity_used'] * (float)$item['cost_per_unit'], 2),
+                            
+                            // Stock levels (projected)
+                            'previous_quantity' => $previousQuantity,
+                            'new_quantity' => $newQuantity,
+                            
+                            // User information - IMPORTANT: Capture requester name
+                            'requested_by' => auth()->user()->name,
+                            'requested_by_id' => auth()->id(),
+                            'requester' => auth()->user()->name,
+                            
+                            // Reason
+                            'reason' => "Material release for client: {$client->name}",
+                            
+                            // Timestamps
+                            'requested_at' => now()->toDateTimeString(),
+                        ],
+                    ]);
+                    
+                    // Broadcast the approval request event
                     try {
                         event(new ApprovalRequestCreated($approval));
                     } catch (\Exception $e) {
@@ -465,6 +519,10 @@ class Masterlist extends Component
     protected function processAutoApprovedRelease($approval, $item, $inventory, $client): void
     {
         try {
+            // IMPORTANT: Capture user info FIRST for consistent attribution
+            $requesterName = auth()->user()->name;
+            $requesterId = auth()->id();
+
             // Create expense record
             $totalCost = round($item['quantity_used'] * (float)$item['cost_per_unit'], 2);
             $expense = Expense::create([
@@ -493,44 +551,64 @@ class Masterlist extends Component
 
             // Record outbound stock movement
             $project = Project::find($this->project_id);
+            $projectName = $project ? $project->name : 'N/A';
             $notes = "Released to client: {$client->name}";
             if ($project) {
-                $notes .= " - Project: {$project->name} (Ref: {$project->reference_code})";
+                $notes .= " - Project: {$project->name}";
             }
 
-            $inventory->recordStockMovement('outbound', $item['quantity_used'], auth()->id(), [
+            $stockMovement = $inventory->recordStockMovement('outbound', $item['quantity_used'], $requesterId, [
                 'cost_per_unit' => $item['cost_per_unit'],
                 'total_cost' => $totalCost,
                 'reference' => 'expense_' . $expense->id,
                 'notes' => $notes,
             ], $previousQuantity);
 
-            // Create history entry for the completed material release
-            $changes = [
-                'status' => 'approved',
-                'project' => $approval->project ?? 'N/A',
-                'client' => $approval->client ?? 'N/A',
-                'material' => $inventory->material_name,
-                'material_details' => $inventory->brand . ' ' . $inventory->description,
-                'quantity' => $item['quantity_used'],
-                'cost_per_unit' => $item['cost_per_unit'],
-                'total_cost' => $totalCost,
-                'reason' => "Material release for client: {$client->name}",
-                'approved_by' => auth()->user()->name,
-                'completed_at' => now()->toDateTimeString(),
-                'auto_approved' => true, // Indicate this was auto-approved by system admin
-                'approved_by_self' => true, // System admin approved their own request
-            ];
-
+            // Create comprehensive Material Release history entry
             $history = History::create([
-                'user_id' => auth()->id(),
+                'user_id' => $requesterId,
                 'action' => 'Material Release Completed',
                 'model' => 'MaterialReleaseApproval',
                 'model_id' => $approval->id,
-                'changes' => json_encode($changes),
-                'old_values' => json_encode([
-                    'status' => 'pending'
-                ]),
+                'changes' => [
+                    // Release type
+                    'release_type' => 'direct_release',
+                    
+                    // Status (completed/approved)
+                    'status' => 'approved',
+                    'approval_status' => 'approved',
+                    
+                    // Client and Project
+                    'client' => $client->name,
+                    'client_name' => $client->name,
+                    'project' => $projectName,
+                    'project_name' => $projectName,
+                    
+                    // Material information
+                    'inventory_id' => $inventory->id,
+                    'material_brand' => $inventory->brand,
+                    'material_description' => $inventory->description,
+                    'quantity' => $item['quantity_used'],
+                    'quantity_released' => $item['quantity_used'],
+                    'cost_per_unit' => $item['cost_per_unit'],
+                    'total_cost' => $totalCost,
+                    'stock_movement_id' => $stockMovement->id,
+                    
+                    // Stock movement details
+                    'previous_quantity' => $previousQuantity,
+                    'new_quantity' => max(0, $newQuantity),
+                    
+                    // User information (self-release by system admin)
+                    'requested_by' => $requesterName,
+                    'approved_by' => $requesterName, // Same person for auto-approved
+                    'auto_approved' => true,
+                    
+                    // Additional details
+                    'reason' => "Material release for client: {$client->name}",
+                ],
+                'old_values' => [
+                    'quantity' => $previousQuantity,
+                ],
             ]);
 
             // Broadcast history event
@@ -887,6 +965,18 @@ class Masterlist extends Component
 
     public function updatedSelectedItems()
     {
+        $this->selectAll = count($this->selectedItems) === $this->inventories->count();
+    }
+
+    public function toggleItemSelection($itemId)
+    {
+        $index = array_search($itemId, $this->selectedItems);
+        if ($index !== false) {
+            unset($this->selectedItems[$index]);
+            $this->selectedItems = array_values($this->selectedItems);
+        } else {
+            $this->selectedItems[] = $itemId;
+        }
         $this->selectAll = count($this->selectedItems) === $this->inventories->count();
     }
 

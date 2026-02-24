@@ -111,6 +111,10 @@ class History extends Model
             'export' => 'Exported',
             'Stock Movement Recorded' => 'Inbound',
             'Inbound Stock Added' => 'Inbound',
+            'Material Release Completed' => 'Material Release',
+            'Material Release Request Created' => 'Release Request',
+            'Approval Request Approved' => 'Approved',
+            'Approval Request Declined' => 'Declined',
             default => ucfirst($this->action),
         };
     }
@@ -130,8 +134,55 @@ class History extends Model
             'material_release_approval' => 'Material Release Approval',
             'MaterialReleaseApproval' => 'Material Release Approval',
             'StockMovement' => 'Stock Movement',
+            'project' => 'Project',
+            'project_note' => 'Project Note',
+            'tool' => 'Tool',
+            'receipt_verification' => 'Receipt Verification',
             default => ucfirst($this->model),
         };
+    }
+    
+    /**
+     * Get the release type from changes.
+     *
+     * @return string|null
+     */
+    public function getReleaseTypeAttribute(): ?string
+    {
+        if (!in_array($this->action, ['Material Release Completed', 'Material Release Request Created', 'Approval Request Approved', 'Approval Request Declined'])) {
+            return null;
+        }
+        
+        $changes = is_array($this->changes) ? $this->changes : json_decode($this->changes ?? '[]', true);
+        $releaseType = $changes['release_type'] ?? null;
+        
+        return match ($releaseType) {
+            'direct_release' => 'Direct Release (Self-Approved)',
+            'approval_based_release' => 'Approval-Based Release',
+            default => null,
+        };
+    }
+    
+    /**
+     * Check if this is a direct release (self-approved).
+     *
+     * @return bool
+     */
+    public function isDirectRelease(): bool
+    {
+        $changes = is_array($this->changes) ? $this->changes : json_decode($this->changes ?? '[]', true);
+        return ($changes['release_type'] ?? null) === 'direct_release';
+    }
+    
+    /**
+     * Check if this is an approval-based release.
+     *
+     * @return bool
+     */
+    public function isApprovalBasedRelease(): bool
+    {
+        $changes = is_array($this->changes) ? $this->changes : json_decode($this->changes ?? '[]', true);
+        return ($changes['release_type'] ?? null) === 'approval_based_release';
     }
 
     /**
@@ -175,7 +226,7 @@ class History extends Model
      */
     public function projectRelation()
     {
-        return $this->belongsTo(\App\Models\Project::class, 'model_id')->where('model', 'project');
+        return $this->belongsTo(\App\Models\Project::class, 'model_id');
     }
 
     /**
@@ -183,7 +234,7 @@ class History extends Model
      */
     public function expenseRelation()
     {
-        return $this->belongsTo(\App\Models\Expense::class, 'model_id')->where('model', 'expense');
+        return $this->belongsTo(\App\Models\Expense::class, 'model_id');
     }
 
     /**
@@ -191,7 +242,7 @@ class History extends Model
      */
     public function clientRelation()
     {
-        return $this->belongsTo(\App\Models\Client::class, 'model_id')->where('model', 'client');
+        return $this->belongsTo(\App\Models\Client::class, 'model_id');
     }
 
     /**
@@ -199,7 +250,7 @@ class History extends Model
      */
     public function inventoryRelation()
     {
-        return $this->belongsTo(\App\Models\Inventory::class, 'model_id')->where('model', 'inventory');
+        return $this->belongsTo(\App\Models\Inventory::class, 'model_id');
     }
 
     /**
@@ -207,6 +258,6 @@ class History extends Model
      */
     public function approvalRelation()
     {
-        return $this->belongsTo(\App\Models\MaterialReleaseApproval::class, 'model_id')->where('model', 'MaterialReleaseApproval');
+        return $this->belongsTo(\App\Models\MaterialReleaseApproval::class, 'model_id');
     }
 }
