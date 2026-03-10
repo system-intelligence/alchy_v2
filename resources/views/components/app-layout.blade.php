@@ -67,6 +67,12 @@
                             <x-heroicon-o-user class="w-5 h-5 mr-3" />
                             Profile
                         </a>
+                        <button onclick="toggleAppFullscreen()" class="w-full flex items-center py-3 px-3 rounded-lg transition duration-200 hover:bg-blue-50 dark:hover:bg-gray-700 hover:text-blue-600 text-gray-700 dark:text-gray-300">
+                            <svg class="w-5 h-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                            Full Screen
+                        </button>
                     </div>
                 </div>
             </nav>
@@ -116,8 +122,32 @@
 
     @livewireScripts
     <script>
+        // Toggle sidebar on mobile
         document.getElementById('sidebar-toggle').addEventListener('click', function() {
             document.getElementById('sidebar').classList.toggle('-translate-x-full');
+        });
+
+        // Fullscreen toggle function
+        function toggleAppFullscreen() {
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            } else {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.error('Fullscreen error:', err);
+                });
+            }
+        }
+
+        // Listen for fullscreen changes to update button text
+        document.addEventListener('fullscreenchange', () => {
+            const btn = document.querySelector('button[onclick="toggleAppFullscreen()"]');
+            if (btn) {
+                if (document.fullscreenElement) {
+                    btn.innerHTML = '<svg class="w-5 h-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg> Exit Full Screen';
+                } else {
+                    btn.innerHTML = '<svg class="w-5 h-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg> Full Screen';
+                }
+            }
         });
     </script>
 </body>

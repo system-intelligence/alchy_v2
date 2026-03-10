@@ -33,11 +33,16 @@ class StockMovement extends Model
 
     protected $casts = [
         'date_received' => 'date',
-        'quantity' => 'integer',
+        'quantity' => 'decimal:2',
         'cost_per_unit' => 'decimal:2',
         'total_cost' => 'decimal:2',
-        'previous_quantity' => 'integer',
-        'new_quantity' => 'integer',
+        'previous_quantity' => 'decimal:2',
+        'new_quantity' => 'decimal:2',
+    ];
+
+    protected $appends = [
+        'movement_type_display',
+        'quantity_change',
     ];
 
     /**
@@ -94,9 +99,9 @@ class StockMovement extends Model
     /**
      * Get the quantity change (positive for inbound, negative for outbound).
      */
-    public function getQuantityChangeAttribute(): int
+    public function getQuantityChangeAttribute(): float
     {
-        return $this->quantity; // Now stored as signed value
+        return (float) $this->quantity; // Now stored as signed value
     }
 
 }

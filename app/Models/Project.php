@@ -20,8 +20,13 @@ class Project extends Model
         'planning',
         'in_progress',
         'completed',
-        'warranty',
+        'warranty', 
     ];
+
+    /**
+     * Valid job types for projects.
+     */
+    public const JOB_TYPES = ['service', 'installation', 'delivery', 'repair'];
 
     /**
      * The attributes that are mass assignable.

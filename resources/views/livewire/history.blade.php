@@ -1,11 +1,16 @@
-        <!-- livewire:multiple-root-elements -->
-<div>
+         <!-- livewire:multiple-root-elements -->
+@php
+$isSystemAdmin = auth()->user() && auth()->user()->role === 'system_admin';
+$isDeveloper = auth()->user() && auth()->user()->role === 'developer';
+$pageTitle = $isDeveloper ? 'My Activity History' : ($isSystemAdmin ? 'All Activity History' : 'Activity History');
+@endphp
+<div>   
     {{-- Flash Messages --}}
     @if (session()->has('success'))
         <div class="mb-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded">
             {{ session('success') }}
         </div>
-    @endif
+    @endif  
 
     @if (session()->has('error'))
         <div class="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
@@ -14,23 +19,13 @@
     @endif
 
     <div class="mb-6">
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Activity History</h1>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">{{ $pageTitle }}</h1>
+        @if($isDeveloper)
+        <p class="text-sm text-gray-600 dark:text-gray-400">Only your personal activity logs are visible</p>
+        @else
         <p class="text-sm text-gray-600 dark:text-gray-400">View all user actions and changes in the system</p>
-
-        {{-- TEST BUTTON: Add sample inbound stock for testing --}}
-        @if(app()->environment(['local', 'development']))
-        <div class="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded">
-            <div class="flex items-center justify-between">
-                <div class="text-sm text-yellow-800 dark:text-yellow-200">
-                    <strong>🧪 Test Inbound Stock Recording:</strong> Click to add sample stock and see it in history
-                </div>
-                <button wire:click="addTestInboundStock"
-                        class="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-medium rounded">
-                    Add Test Stock
-                </button>
-            </div>
-        </div>
         @endif
+
     </div>
 
     {{-- Summary Stats --}}
@@ -57,7 +52,7 @@
     <div class="mb-6 space-y-4">
         <div class="flex flex-col sm:flex-row gap-4">
             <div class="flex-1">
-                <input wire:model.live.debounce.300ms="search"
+                <input wire:model.live="search"
                     type="text"
                     placeholder="Search by action, model, user, content..."
                     class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white">
@@ -180,12 +175,15 @@
                                         }
 
                                         // Try to get project from relationship first
+                                        $projectRefCode = null;
                                         if ($approval->expense && $approval->expense->project) {
                                             $projectName = $approval->expense->project->name;
+                                            $projectRefCode = $approval->expense->project->reference_code;
                                         }
                                         // Fallback to history changes
                                         if (!$projectName && !empty($historyChanges['project']) && $historyChanges['project'] !== 'N/A') {
                                             $projectName = $historyChanges['project'];
+                                            $projectRefCode = null; // Project already includes ref code in history changes
                                         }
 
                                         // Check user role - visible to user and system_admin
@@ -200,12 +198,12 @@
                                     @if(in_array($userRole, ['user', 'system_admin']) && $projectName)
                                         <div class="bg-purple-50 dark:bg-purple-900/20 px-3 py-2 rounded border border-purple-200 dark:border-purple-800">
                                             <span class="text-xs font-semibold text-purple-700 dark:text-purple-300">Project:</span>
-                                            <span class="text-sm font-medium text-purple-900 dark:text-purple-100">{{ $projectName }}</span>
+                                            <span class="text-sm font-medium text-purple-900 dark:text-purple-100">{{ $projectName }}{{ $projectRefCode ? ' (' . $projectRefCode . ')' : '' }}</span>
                                         </div>
                                     @endif
                                     <div class="bg-gray-50 dark:bg-gray-900 px-3 py-2 rounded">
                                         <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">Materials:</span>
-                                        <span class="text-sm font-medium text-gray-900 dark:text-white">{{ $approval->inventory->brand }} - {{ $approval->inventory->description }} ({{ number_format($approval->quantity_requested) }} units @ ₱{{ number_format($historyCost, 2) }})</span>
+                                        <span class="text-sm font-medium text-gray-900 dark:text-white">{{ $approval->inventory->brand }} - {{ $approval->inventory->description }} ({{ number_format($approval->quantity_requested, 2) }} units @if($isSystemAdmin)₱{{ number_format($historyCost, 2) }}@else***@endif)</span>
                                     </div>
                                     @if($approval->status === 'approved' && $approval->reviewer)
                                         <div class="bg-gray-50 dark:bg-gray-900 px-3 py-2 rounded">
@@ -245,11 +243,18 @@
                                         <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">Item:</span>
                                         <span class="text-sm font-medium text-gray-900 dark:text-white">{{ $expense->inventory->brand }} {{ $expense->inventory->description }}</span>
                                     </div>
-                                    @if(isset($oldValues['cost_per_unit']) && isset($changes['cost_per_unit']))
+                                    @if(isset($oldValues['cost_per_unit']) && isset($changes['cost_per_unit']) && $isSystemAdmin)
                                         <div class="bg-green-50 dark:bg-green-900/20 px-3 py-2 rounded border border-green-200 dark:border-green-800">
                                             <span class="text-xs font-semibold text-green-700 dark:text-green-300">Cost per Unit:</span>
                                             <span class="text-sm font-medium text-green-900 dark:text-green-100">₱{{ number_format($oldValues['cost_per_unit'], 2) }} → ₱{{ number_format($changes['cost_per_unit'], 2) }}</span>
                                         </div>
+                                        @if($expense->quantity_used > 1)
+                                            <div class="bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded border border-blue-200 dark:border-blue-800">
+                                                <span class="text-xs font-semibold text-blue-700 dark:text-blue-300">Quantity:</span>
+                                                <span class="text-sm font-medium text-blue-900 dark:text-blue-100">{{ number_format($expense->quantity_used) }} units</span>
+                                            </div>
+                                        @endif
+                                    @elseif(isset($oldValues['cost_per_unit']) || isset($changes['cost_per_unit']))
                                         @if($expense->quantity_used > 1)
                                             <div class="bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded border border-blue-200 dark:border-blue-800">
                                                 <span class="text-xs font-semibold text-blue-700 dark:text-blue-300">Quantity:</span>
@@ -320,7 +325,13 @@
                                         <div class="text-sm text-blue-900 dark:text-blue-100 space-y-1">
                                             <div><strong>Client:</strong> {{ $approval->expense->client->name ?? $createChanges['client'] ?? 'N/A' }}</div>
                                             @if($approval->expense->project || (!empty($createChanges['project']) && $createChanges['project'] !== 'N/A'))
-                                                <div><strong>Project:</strong> {{ $approval->expense->project->name ?? $createChanges['project'] ?? 'N/A' }}</div>
+                                                @php
+                                                    $projectObj = $approval->expense->project;
+                                                    $projectName = is_object($projectObj) ? $projectObj->name : ($createChanges['project'] ?? 'N/A');
+                                                    // If using fallback, project already includes ref code
+                                                    $projectRef = is_object($projectObj) ? ($projectObj->reference_code ?? '') : '';
+                                                @endphp
+                                                <div><strong>Project:</strong> {{ $projectName }}{{ $projectRef ? ' (' . $projectRef . ')' : '' }}</div>
                                             @endif
                                             <div><strong>Item:</strong> {{ $approval->inventory->brand }} - {{ $approval->inventory->description }}</div>
                                             <div><strong>Quantity:</strong> {{ number_format($approval->quantity_requested) }}</div>
@@ -333,7 +344,9 @@
                                                 }
                                                 $historyCost = $historyChanges['cost_per_unit'] ?? $approval->expense->cost_per_unit ?? 0;
                                             @endphp
-                                            <div><strong>Cost per unit:</strong> ₱{{ number_format($historyCost, 2) }}</div>
+                                            @if($isSystemAdmin)
+                                                <div><strong>Cost per unit:</strong> ₱{{ number_format($historyCost, 2) }}</div>
+                                            @endif
                                         </div>
                                     </div>
                                 @else
@@ -375,6 +388,10 @@
                                                 // For tools, always show 7 details captured (user-editable fields)
                                                 $detailsCaptured = 7;
                                                 $changeCount = $history->action === 'create' ? 7 : count($changes);
+                                            } elseif ($history->model === 'project') {
+                                                // For projects, show 5 details captured
+                                                $detailsCaptured = 5;
+                                                $changeCount = $history->action === 'create' ? 5 : count($changes);
                                             } else {
                                                 // For other models, changes contains only actual changes
                                                 $changeCount = count($changes);
@@ -410,7 +427,7 @@
                     <thead class="bg-gray-50 dark:bg-gray-700">
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Action</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">User</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Request by</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Model</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Date/Time</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
@@ -443,7 +460,7 @@
                                         <span class="text-sm font-medium text-gray-900 dark:text-white">{{ $history->action_description }}</span>
                                     </div>
                                 </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">{{ $history->user->name }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm {{ $history->user && $history->user->role === 'system_admin' ? 'text-orange-600 dark:text-orange-400' : 'text-gray-900 dark:text-white' }}">{{ $history->user->name }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">{{ $history->model_name }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{{ $history->created_at->format('M d, Y - h:i A') }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -467,7 +484,7 @@
 
     {{-- Pagination --}}
     @if($histories->hasPages())
-        <div class="mt-6 mb-20 text-center">
+        <div class="mt-6 mb-24 sm:mb-20 text-center">
             {{ $histories->links() }}
         </div>
     @endif
@@ -493,8 +510,8 @@
                                 <div class="text-sm font-medium text-gray-900 dark:text-white">{{ $selectedHistory->action_description }}</div>
                             </div>
                             <div>
-                                <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">User:</span>
-                                <div class="text-sm font-medium text-gray-900 dark:text-white">{{ $selectedHistory->user->name }}</div>
+                                <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">{{ $selectedHistory->model === 'tool' ? 'User:' : 'Request by:' }}</span>
+                                <div class="text-sm font-medium {{ $selectedHistory->user && $selectedHistory->user->role === 'system_admin' ? 'text-orange-600 dark:text-orange-400' : 'text-gray-900 dark:text-white' }}">{{ $selectedHistory->user->name }}</div>
                             </div>
                             <div>
                                 <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">Model:</span>
@@ -524,7 +541,7 @@
                                             }
                                             $historyCost = $historyChanges['cost_per_unit'] ?? $approval->expense->cost_per_unit ?? 0;
                                         @endphp
-                                        <div class="text-sm font-medium text-gray-900 dark:text-white">{{ $approval->inventory->brand }} - {{ $approval->inventory->description }} ({{ number_format($approval->quantity_requested) }} units @ ₱{{ number_format($historyCost, 2) }})</div>
+                                        <div class="text-sm font-medium text-gray-900 dark:text-white">{{ $approval->inventory->brand }} - {{ $approval->inventory->description }} ({{ number_format($approval->quantity_requested, 2) }} units @if($isSystemAdmin)₱{{ number_format($historyCost, 2) }}@else***@endif)</div>
                                     </div>
                                     @if($approval->status === 'approved' && $approval->expense && $approval->expense->client)
                                         <div>
@@ -535,7 +552,7 @@
                                     @if($approval->status === 'approved' && $approval->expense && $approval->expense->project)
                                         <div>
                                             <span class="text-xs font-semibold text-purple-700 dark:text-purple-300">Project:</span>
-                                            <div class="text-sm font-medium text-purple-900 dark:text-purple-100">{{ $approval->expense->project->name }}</div>
+                                            <div class="text-sm font-medium text-purple-900 dark:text-purple-100">{{ $approval->expense->project->name }} ({{ $approval->expense->project->reference_code }})</div>
                                         </div>
                                     @endif
                                     @if($approval->status === 'approved' && $approval->reviewer)
@@ -583,9 +600,11 @@
                                                                         <th class="px-4 py-3 text-left text-xs font-medium text-blue-700 dark:text-blue-300 uppercase tracking-wider">Quantity</th>
                                                                         <th class="px-4 py-3 text-left text-xs font-medium text-blue-700 dark:text-blue-300 uppercase tracking-wider">Previous Stock</th>
                                                                         <th class="px-4 py-3 text-left text-xs font-medium text-blue-700 dark:text-blue-300 uppercase tracking-wider">New Stock</th>
+                                                                        @if($isSystemAdmin)
                                                                         <th class="px-4 py-3 text-left text-xs font-medium text-blue-700 dark:text-blue-300 uppercase tracking-wider">Cost/Unit</th>
                                                                         <th class="px-4 py-3 text-left text-xs font-medium text-blue-700 dark:text-blue-300 uppercase tracking-wider">Total Cost</th>
-                                                                        <th class="px-4 py-3 text-left text-xs font-medium text-blue-700 dark:text-blue-300 uppercase tracking-wider">User</th>
+                                                                        @endif
+                                                                        <th class="px-4 py-3 text-left text-xs font-medium text-blue-700 dark:text-blue-300 uppercase tracking-wider">Request by</th>
                                                                         <th class="px-4 py-3 text-left text-xs font-medium text-blue-700 dark:text-blue-300 uppercase tracking-wider">Date/Time</th>
                                                                         <th class="px-4 py-3 text-left text-xs font-medium text-blue-700 dark:text-blue-300 uppercase tracking-wider">Notes</th>
                                                                         <th class="px-4 py-3 text-left text-xs font-medium text-blue-700 dark:text-blue-300 uppercase tracking-wider">Supplier</th>
@@ -597,9 +616,10 @@
                                                                         <tr>
                                                                             <td class="px-4 py-4 whitespace-nowrap text-sm text-blue-900 dark:text-blue-100">{{ $movement->movement_type_display }}</td>
                                                                             <td class="px-4 py-4 text-sm text-blue-900 dark:text-blue-100">{{ $movement->inventory->brand }} {{ $movement->inventory->description }}</td>
-                                                                            <td class="px-4 py-4 whitespace-nowrap text-sm text-blue-900 dark:text-blue-100">{{ number_format(abs($movement->quantity)) }} units</td>
-                                                                            <td class="px-4 py-4 whitespace-nowrap text-sm text-blue-900 dark:text-blue-100">{{ number_format($movement->previous_quantity) }}</td>
-                                                                            <td class="px-4 py-4 whitespace-nowrap text-sm text-blue-900 dark:text-blue-100">{{ number_format($movement->new_quantity) }}</td>
+                                                                            <td class="px-4 py-4 whitespace-nowrap text-sm text-blue-900 dark:text-blue-100">{{ number_format(abs($movement->quantity), 2) }} units</td>
+                                                                            <td class="px-4 py-4 whitespace-nowrap text-sm text-blue-900 dark:text-blue-100">{{ number_format($movement->previous_quantity, 2) }}</td>
+                                                                            <td class="px-4 py-4 whitespace-nowrap text-sm text-blue-900 dark:text-blue-100">{{ number_format($movement->new_quantity, 2) }}</td>
+                                                                            @if($isSystemAdmin)
                                                                             <td class="px-4 py-4 whitespace-nowrap text-sm text-blue-600 dark:text-blue-400">
                                                                                 @if($movement->cost_per_unit)
                                                                                     ₱{{ number_format($movement->cost_per_unit, 2) }}
@@ -614,7 +634,8 @@
                                                                                     -
                                                                                 @endif
                                                                             </td>
-                                                                            <td class="px-4 py-4 whitespace-nowrap text-sm text-blue-900 dark:text-blue-100">{{ $movement->user->name }}</td>
+                                                                            @endif
+                                                                            <td class="px-4 py-4 whitespace-nowrap text-sm {{ $movement->user && $movement->user->role === 'system_admin' ? 'text-orange-600 dark:text-orange-400' : 'text-blue-900 dark:text-blue-100' }}">{{ $movement->user->name }}</td>
                                                                             <td class="px-4 py-4 whitespace-nowrap text-sm text-blue-900 dark:text-blue-100">{{ $movement->created_at->format('M d, Y - h:i A') }}</td>
                                                                             <td class="px-4 py-4 text-sm text-blue-900 dark:text-blue-100">
                                                                                 @if($movement->notes)
@@ -644,7 +665,34 @@
                             @endif
                         @elseif($selectedHistory->model === 'project')
                             @php $project = App\Models\Project::with('client')->find($selectedHistory->model_id); @endphp
-                            @if($project)
+                            @if($selectedHistory->action === 'create')
+                                <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                                    <div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                                        <div class="flex items-center gap-2">
+                                            <x-heroicon-o-plus-circle class="w-5 h-5 text-green-600" />
+                                            <span class="text-sm font-semibold text-green-700 dark:text-green-300">New Project Created</span>
+                                        </div>
+                                        @if($project)
+                                            <div class="mt-3 space-y-2">
+                                                <div>
+                                                    <span class="text-xs font-semibold text-green-600 dark:text-green-400">Project Name:</span>
+                                                    <span class="text-sm font-medium text-green-900 dark:text-green-100">{{ $project->name }}</span>
+                                                </div>
+                                                <div>
+                                                    <span class="text-xs font-semibold text-green-600 dark:text-green-400">Reference Code:</span>
+                                                    <span class="text-sm font-medium text-green-900 dark:text-green-100">{{ $project->reference_code }}</span>
+                                                </div>
+                                                @if($project->client)
+                                                    <div>
+                                                        <span class="text-xs font-semibold text-green-600 dark:text-green-400">Client:</span>
+                                                        <span class="text-sm font-medium text-green-900 dark:text-green-100">{{ $project->client->name }}</span>
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        @endif
+                                    </div>
+                                </div>
+                            @elseif($project)
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                                     <div>
                                         <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">Project:</span>
@@ -733,10 +781,14 @@
                                             }
 
                                             $projectName = null;
+                                            $projectRefCode = null;
                                             if ($expense && $expense->project) {
                                                 $projectName = $expense->project->name;
+                                                $projectRefCode = $expense->project->reference_code;
                                             } elseif (!empty($changes['project']) && $changes['project'] !== 'N/A') {
                                                 $projectName = $changes['project'];
+                                                // Project already includes ref code in the string
+                                                $projectRefCode = null;
                                             }
 
                                             $userRole = auth()->user()?->role ?? '';
@@ -745,7 +797,7 @@
                                             <div><strong>Client:</strong> {{ $clientName }}</div>
                                         @endif
                                         @if(in_array($userRole, ['user', 'system_admin']) && $projectName)
-                                            <div><strong>Project:</strong> {{ $projectName }}</div>
+                                            <div><strong>Project:</strong> {{ $projectName }} @if($projectRefCode)({{ $projectRefCode }})@endif</div>
                                         @endif
                                         <div><strong>Item:</strong> {{ $expense->inventory->brand }} - {{ $expense->inventory->description }}</div>
                                         <div><strong>Quantity:</strong> {{ $selectedHistory->action === 'Inbound Stock Added' ? number_format($changes['quantity'] ?? 0) : number_format($approval->quantity_requested) }}</div>
@@ -758,7 +810,9 @@
                                             }
                                             $historyCost = $historyChanges['cost_per_unit'] ?? $expense->cost_per_unit ?? 0;
                                         @endphp
-                                        <div><strong>Cost per unit:</strong> ₱{{ number_format($historyCost, 2) }}</div>
+                                        @if($isSystemAdmin)
+                                            <div><strong>Cost per unit:</strong> ₱{{ number_format($historyCost, 2) }}</div>
+                                        @endif
                                         @if($expense->notes)
                                             <div><strong>Notes:</strong></div>
                                             <div class="ml-4 mt-1 text-sm">{!! nl2br(str_replace([' - ', ' ('], ['<br>', '<br>('], $expense->notes)) !!}</div>
@@ -769,76 +823,14 @@
                                             @elseif($selectedHistory->action === 'Approval Request Declined' && $approval->reviewer)
                                                 <div><strong>Declined by:</strong> {{ $approval->reviewer->name }}</div>
                                             @endif
-                                        @endif
                                     </div>
                                 </div>
                             </div>
                         @endif
                     @endif
 
-                    {{-- Request Details --}}
-                    @if($selectedHistory->model === 'MaterialReleaseApproval')
-                        @php $approval = App\Models\MaterialReleaseApproval::with('expense.client', 'expense.project', 'inventory', 'reviewer')->find($selectedHistory->model_id); @endphp
-                        @if($approval && $approval->expense)
-                            <div class="mb-6">
-                                <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Request Details</h3>
-                                <div class="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg p-6">
-                                    <div class="text-sm text-blue-900 dark:text-blue-100 space-y-2">
-                                        @php
-                                            // Properly decode changes
-                                            $changes = [];
-                                            if (is_string($selectedHistory->changes)) {
-                                                $changes = json_decode($selectedHistory->changes, true) ?? [];
-                                            } elseif (is_array($selectedHistory->changes)) {
-                                                $changes = $selectedHistory->changes;
-                                            }
-                                            
-                                            // Get client name
-                                            $clientName = null;
-                                            if ($approval->expense && $approval->expense->client) {
-                                                $clientName = $approval->expense->client->name;
-                                            } elseif (!empty($changes['client']) && $changes['client'] !== 'N/A') {
-                                                $clientName = $changes['client'];
-                                            }
-                                            
-                                            // Get project name
-                                            $projectName = null;
-                                            if ($approval->expense && $approval->expense->project) {
-                                                $projectName = $approval->expense->project->name;
-                                            } elseif (!empty($changes['project']) && $changes['project'] !== 'N/A') {
-                                                $projectName = $changes['project'];
-                                            }
-                                            
-                                            // Check user role - visible to user and system_admin
-                                            $userRole = auth()->user()?->role;
-                                        @endphp
-                                        @if(in_array($userRole, ['user', 'system_admin']) && $clientName)
-                                            <div><strong>Client:</strong> {{ $clientName }}</div>
-                                        @endif
-                                        @if(in_array($userRole, ['user', 'system_admin']) && $projectName)
-                                            <div><strong>Project:</strong> {{ $projectName }}</div>
-                                        @endif
-                                        <div><strong>Item:</strong> {{ $approval->inventory->brand }} - {{ $approval->inventory->description }}</div>
-                                        <div><strong>Quantity:</strong> {{ number_format($approval->quantity_requested) }}</div>
-                                        @php
-                                            $historyCost = null;
-                                            if (is_string($selectedHistory->changes)) {
-                                                $historyChanges = json_decode($selectedHistory->changes, true) ?? [];
-                                            } elseif (is_array($selectedHistory->changes)) {
-                                                $historyChanges = $selectedHistory->changes;
-                                            }
-                                            $historyCost = $historyChanges['cost_per_unit'] ?? $approval->expense->cost_per_unit ?? 0;
-                                        @endphp
-                                        <div><strong>Cost per unit:</strong> ₱{{ number_format($historyCost, 2) }}</div>
-                                        @if($selectedHistory->action === 'Material Release Approved' && $approval->reviewer)
-                                            <div><strong>Approved by:</strong> {{ $approval->reviewer->name }}</div>
-                                        @elseif($selectedHistory->action === 'Approval Request Declined' && $approval->reviewer)
-                                            <div><strong>Declined by:</strong> {{ $approval->reviewer->name }}</div>
-                                        @endif
-                                    </div>
-                                </div>
-                            </div>
-                        @endif
+
+
 
                         {{-- Inbound Stock Details --}}
                         @if($selectedHistory->action === 'Inbound Stock Added')
@@ -885,17 +877,25 @@
                                             <div class="flex items-center gap-3">
                                                 <span class="text-green-600 text-lg">✅</span>
                                                 <strong class="text-green-900 dark:text-green-100 min-w-[100px]">Cost/Unit:</strong>
+                                                @if($isSystemAdmin)
                                                 <span class="text-green-900 dark:text-green-100">{{ ($changes['cost_per_unit'] ?? 0) > 0 ? '₱' . number_format($changes['cost_per_unit'], 2) : '-' }}</span>
+                                                @else
+                                                <span class="text-green-900 dark:text-green-100">***</span>
+                                                @endif
                                             </div>
                                             <div class="flex items-center gap-3">
                                                 <span class="text-green-600 text-lg">✅</span>
                                                 <strong class="text-green-900 dark:text-green-100 min-w-[100px]">Total Cost:</strong>
                                                 <span class="text-green-900 dark:text-green-100">{{ ($changes['total_cost'] ?? 0) > 0 ? '₱' . number_format($changes['total_cost'], 2) . ' (calculated total)' : '- (calculated total)' }}</span>
                                             </div>
-                                            <div class="flex items-center gap-3">
+                                            @php
+                                        $requestByUser = $selectedHistory->user;
+                                        $isRequestByAdmin = $requestByUser && $requestByUser->role === 'system_admin';
+                                    @endphp
+                                    <div class="flex items-center gap-3">
                                                 <span class="text-green-600 text-lg">✅</span>
-                                                <strong class="text-green-900 dark:text-green-100 min-w-[100px]">User:</strong>
-                                                <span class="text-green-900 dark:text-green-100">{{ $selectedHistory->user->name }}</span>
+                                                <strong class="text-green-900 dark:text-green-100 min-w-[100px]">{{ $selectedHistory->model === 'tool' ? 'User:' : 'Request by:' }}</strong>
+                                                <span class="text-sm font-medium {{ $isRequestByAdmin ? 'text-orange-600 dark:text-orange-400' : 'text-green-900 dark:text-green-100' }}">{{ $selectedHistory->user->name }}</span>
                                             </div>
                                             <div class="flex items-center gap-3">
                                                 <span class="text-green-600 text-lg">✅</span>
@@ -929,9 +929,11 @@
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Change</th>
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Before</th>
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">After</th>
+                                                    @if($isSystemAdmin)
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Cost/Unit</th>
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Total Cost</th>
-                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">User</th>
+                                                    @endif
+                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Request by</th>
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Notes</th>
                                                 </tr>
                                             </thead>
@@ -942,11 +944,12 @@
                                                         <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">{{ $movement->movement_type_display }}</td>
                                                         <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">
                                                             <span class="{{ $movement->quantity_change > 0 ? 'text-green-600' : 'text-red-600' }}">
-                                                                {{ number_format($movement->quantity_change) }}
+                                                                {{ number_format($movement->quantity_change, 2) }}
                                                             </span>
                                                         </td>
-                                                        <td class="px-4 py-2 text-sm text-red-600 dark:text-red-400">{{ number_format($movement->previous_quantity) }}</td>
-                                                        <td class="px-4 py-2 text-sm text-green-600 dark:text-green-400">{{ number_format($movement->new_quantity) }}</td>
+                                                        <td class="px-4 py-2 text-sm text-red-600 dark:text-red-400">{{ number_format($movement->previous_quantity, 2) }}</td>
+                                                        <td class="px-4 py-2 text-sm text-green-600 dark:text-green-400">{{ number_format($movement->new_quantity, 2) }}</td>
+                                                        @if($isSystemAdmin)
                                                         <td class="px-4 py-2 text-sm text-blue-600 dark:text-blue-400">
                                                             @if($movement->cost_per_unit)
                                                                 ₱{{ number_format($movement->cost_per_unit, 2) }}
@@ -961,7 +964,8 @@
                                                                 -
                                                             @endif
                                                         </td>
-                                                        <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">{{ $movement->user ? $movement->user->name : 'Unknown' }}</td>
+                                                        @endif
+                                                        <td class="px-4 py-2 text-sm {{ $movement->user && $movement->user->role === 'system_admin' ? 'text-orange-600 dark:text-orange-400' : 'text-gray-500 dark:text-gray-300' }}">{{ $movement->user ? $movement->user->name : 'Unknown' }}</td>
                                                         <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">
                                                             @if($movement->notes)
                                                                 {!! nl2br(str_replace(' - ', '<br>', $movement->notes)) !!}
@@ -1045,9 +1049,11 @@
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Change</th>
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Before</th>
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">After</th>
+                                                    @if($isSystemAdmin)
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Cost/Unit</th>
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Total Cost</th>
-                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">User</th>
+                                                    @endif
+                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Request by</th>
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Notes</th>
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Project</th>
                                                 </tr>
@@ -1078,11 +1084,12 @@
                                                         <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">{{ $movement->movement_type_display }}</td>
                                                         <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">
                                                             <span class="{{ $movement->quantity_change > 0 ? 'text-green-600' : 'text-red-600' }}">
-                                                                {{ number_format($movement->quantity_change) }}
+                                                                {{ number_format($movement->quantity_change, 2) }}
                                                             </span>
                                                         </td>
-                                                        <td class="px-4 py-2 text-sm text-red-600 dark:text-red-400">{{ number_format($movement->previous_quantity) }}</td>
-                                                        <td class="px-4 py-2 text-sm text-green-600 dark:text-green-400">{{ number_format($movement->new_quantity) }}</td>
+                                                        <td class="px-4 py-2 text-sm text-red-600 dark:text-red-400">{{ number_format($movement->previous_quantity, 2) }}</td>
+                                                        <td class="px-4 py-2 text-sm text-green-600 dark:text-green-400">{{ number_format($movement->new_quantity, 2) }}</td>
+                                                        @if($isSystemAdmin)
                                                         <td class="px-4 py-2 text-sm text-blue-600 dark:text-blue-400">
                                                             @if($movement->cost_per_unit)
                                                                 ₱{{ number_format($movement->cost_per_unit, 2) }}
@@ -1097,7 +1104,8 @@
                                                                 ₱0.00
                                                             @endif
                                                         </td>
-                                                        <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">{{ $movement->user ? $movement->user->name : 'Unknown' }}</td>
+                                                        @endif
+                                                        <td class="px-4 py-2 text-sm {{ $movement->user && $movement->user->role === 'system_admin' ? 'text-orange-600 dark:text-orange-400' : 'text-gray-500 dark:text-gray-300' }}">{{ $movement->user ? $movement->user->name : 'Unknown' }}</td>
                                                         <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">
                                                             @if($movement->notes)
                                                                 {!! nl2br(e($movement->notes)) !!}
@@ -1141,9 +1149,11 @@
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Change</th>
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Before</th>
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">After</th>
+                                                    @if($isSystemAdmin)
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Cost/Unit</th>
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Total Cost</th>
-                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">User</th>
+                                                    @endif
+                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Request by</th>
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Notes</th>
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Project</th>
                                                 </tr>
@@ -1195,7 +1205,7 @@
                         @endif
                     @else
                         {{-- Field Changes Comparison --}}
-                        @if($selectedHistory->changes && $selectedHistory->action !== 'Inbound Stock Added')
+                        @if($selectedHistory->changes && $selectedHistory->action !== 'Inbound Stock Added' && !($selectedHistory->model === 'tool' && $selectedHistory->action === 'create') && !($selectedHistory->model === 'client' && $selectedHistory->action === 'create'))
                             <div class="mb-6">
                                 @if($selectedHistory->action === 'delete')
                                     <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Deleted Item Details</h3>
@@ -1240,8 +1250,10 @@
                                             <thead class="bg-gray-50 dark:bg-gray-700">
                                                 <tr>
                                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Field</th>
-                                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Before</th>
-                                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">After</th>
+                                                    @if(!in_array($selectedHistory->action, ['create']) || !in_array($selectedHistory->model, ['project', 'inventory']))
+                                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Before</th>
+                                                    @endif
+                                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{{ in_array($selectedHistory->action, ['create']) && in_array($selectedHistory->model, ['project', 'inventory']) ? 'New Value' : 'After' }}</th>
                                                 </tr>
                                             </thead>
                                             <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -1290,10 +1302,26 @@
                                                         <tr>
                                                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{{ $changeData['field_name'] ?? ucfirst(str_replace('_', ' ', $field)) }}</td>
                                                             <td class="px-6 py-4 text-sm text-gray-900 dark:text-white">
-                                                                {{ $changeData['old'] ?? 'N/A' }}
+                                                                @if($field === 'logo')
+                                                                    @if(!empty($changeData['old_logo_filename']))
+                                                                        <span class="text-blue-400">{{ $changeData['old_logo_filename'] }}</span>
+                                                                    @else
+                                                                        <span class="text-gray-400">No logo</span>
+                                                                    @endif
+                                                                @else
+                                                                    {{ $changeData['old'] ?? 'N/A' }}
+                                                                @endif
                                                             </td>
                                                             <td class="px-6 py-4 text-sm text-gray-900 dark:text-white">
-                                                                {{ $changeData['new'] ?? 'N/A' }}
+                                                                @if($field === 'logo')
+                                                                    @if(!empty($changeData['new_logo_filename']))
+                                                                        <span class="text-blue-400">{{ $changeData['new_logo_filename'] }}</span>
+                                                                    @else
+                                                                        <span class="text-gray-400">Logo removed</span>
+                                                                    @endif
+                                                                @else
+                                                                    {{ $changeData['new'] ?? 'N/A' }}
+                                                                @endif
                                                             </td>
                                                         </tr>
                                                     @endforeach
@@ -1303,10 +1331,16 @@
                                                             $oldValue = $oldValues[$field] ?? null;
                                                             $newValue = $changes[$field] ?? null;
                                                             $hasChanged = isset($newValue) && $newValue !== $oldValue;
+                                                            // Custom field name labels
+                                                            $fieldLabel = ucfirst(str_replace('_', ' ', $field));
+                                                            if ($field === 'target_date') {
+                                                                $fieldLabel = 'Target Completion';
+                                                            }
                                                         @endphp
                                                         <tr>
-                                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{{ ucfirst(str_replace('_', ' ', $field)) }}</td>
-                                                            <td class="px-6 py-4 text-sm text-gray-900 dark:text-white">
+                                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{{ $fieldLabel }}</td>
+                                                            @if(!($selectedHistory->model === 'project' && $selectedHistory->action === 'create'))
+                                                                <td class="px-6 py-4 text-sm text-gray-900 dark:text-white">
                                                                 @if(isset($oldValues[$field]))
                                                                     @if(is_array($oldValues[$field]) || is_object($oldValues[$field]))
                                                                         <pre class="whitespace-pre-wrap text-xs">{{ json_encode($oldValues[$field], JSON_PRETTY_PRINT) }}</pre>
@@ -1339,7 +1373,8 @@
                                                                     N/A
                                                                 @endif
                                                             </td>
-                                                            <td class="px-6 py-4 text-sm text-gray-900 dark:text-white">
+                                                            @endif
+                                                            <td class="px-6 py-4 text-sm {{ $selectedHistory->model === 'project' && $selectedHistory->action === 'create' ? 'text-green-600 dark:text-green-400 font-medium' : 'text-gray-900 dark:text-white' }}">
                                                                 @if($hasChanged)
                                                                     @if(is_array($newValue) || is_object($newValue))
                                                                         <pre class="whitespace-pre-wrap text-xs">{{ json_encode($newValue, JSON_PRETTY_PRINT) }}</pre>
@@ -1384,7 +1419,74 @@
 
                         {{-- Change Summary --}}
                         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-                            @if($selectedHistory->action === 'Inbound Stock Added')
+                            @if($selectedHistory->model === 'tool' && $selectedHistory->action === 'create')
+                                @php
+                                    $changes = is_array($selectedHistory->changes) ? $selectedHistory->changes : (is_string($selectedHistory->changes) ? json_decode($selectedHistory->changes, true) ?? [] : []);
+                                @endphp
+                                <div class="text-center mb-4">
+                                    <x-heroicon-o-check-circle class="w-10 h-10 mx-auto text-green-500 mb-2" />
+                                    <h3 class="text-lg font-semibold text-green-600 dark:text-green-400">New Tool Created</h3>
+                                </div>
+                                <div class="space-y-2 text-sm">
+                                    <div class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
+                                        <span class="font-medium text-gray-600 dark:text-gray-400">Quantity:</span>
+                                        <span class="text-gray-900 dark:text-white">{{ $changes['quantity'] ?? '-' }}</span>
+                                    </div>
+                                    <div class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
+                                        <span class="font-medium text-gray-600 dark:text-gray-400">Brand:</span>
+                                        <span class="text-gray-900 dark:text-white">{{ $changes['brand'] ?? '-' }}</span>
+                                    </div>
+                                    <div class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
+                                        <span class="font-medium text-gray-600 dark:text-gray-400">Model:</span>
+                                        <span class="text-gray-900 dark:text-white">{{ $changes['model'] ?? '-' }}</span>
+                                    </div>
+                                    <div class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
+                                        <span class="font-medium text-gray-600 dark:text-gray-400">Description:</span>
+                                        <span class="text-gray-900 dark:text-white">{{ $changes['description'] ?? '-' }}</span>
+                                    </div>
+                                    <div class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
+                                        <span class="font-medium text-gray-600 dark:text-gray-400">Ownership Type:</span>
+                                        <span class="text-gray-900 dark:text-white">{{ ucfirst($changes['ownership_type'] ?? '-') }}</span>
+                                    </div>
+                                    <div class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
+                                        <span class="font-medium text-gray-600 dark:text-gray-400">Released To:</span>
+                                        <span class="text-gray-900 dark:text-white">{{ $changes['released_to'] ?? '-' }}</span>
+                                    </div>
+                                    <div class="flex justify-between py-2">
+                                        <span class="font-medium text-gray-600 dark:text-gray-400">Release Date:</span>
+                                        <span class="text-gray-900 dark:text-white">{{ $changes['release_date'] ?? '-' }}</span>
+                                    </div>
+                                </div>
+                            @elseif($selectedHistory->model === 'client' && $selectedHistory->action === 'create')
+                                @php
+                                    $changes = is_array($selectedHistory->changes) ? $selectedHistory->changes : (is_string($selectedHistory->changes) ? json_decode($selectedHistory->changes, true) ?? [] : []);
+                                    $client = \App\Models\Client::find($selectedHistory->model_id);
+                                @endphp
+                                <div class="text-center mb-4">
+                                    <x-heroicon-o-check-circle class="w-10 h-10 mx-auto text-green-500 mb-2" />
+                                    <h3 class="text-lg font-semibold text-green-600 dark:text-green-400">New Client Created</h3>
+                                </div>
+                                <div class="space-y-2 text-sm">
+                                    @if($client && $client->hasImageBlob())
+                                        <div class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
+                                            <span class="font-medium text-gray-600 dark:text-gray-400">Logo:</span>
+                                            <img src="{{ $client->logo_url }}" alt="Client Logo" class="h-8 w-8 rounded object-cover">
+                                        </div>
+                                    @endif
+                                    <div class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
+                                        <span class="font-medium text-gray-600 dark:text-gray-400">Client Name:</span>
+                                        <span class="text-gray-900 dark:text-white">{{ $changes['name'] ?? '-' }}</span>
+                                    </div>
+                                    <div class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
+                                        <span class="font-medium text-gray-600 dark:text-gray-400">Branch / Location:</span>
+                                        <span class="text-gray-900 dark:text-white">{{ $changes['branch'] ?? '-' }}</span>
+                                    </div>
+                                    <div class="flex justify-between py-2">
+                                        <span class="font-medium text-gray-600 dark:text-gray-400">Client Type:</span>
+                                        <span class="text-gray-900 dark:text-white">{{ ucfirst(str_replace('_', ' ', $changes['client_type'] ?? '-')) }}</span>
+                                    </div>
+                                </div>
+                            @elseif($selectedHistory->action === 'Inbound Stock Added')
                                 @php
                                     $changes = is_array($selectedHistory->changes) ? $selectedHistory->changes : (is_string($selectedHistory->changes) ? json_decode($selectedHistory->changes, true) ?? [] : []);
                                     $inventory = \App\Models\Inventory::find($selectedHistory->model_id);
@@ -1421,6 +1523,7 @@
                                                 <span class="text-green-900 dark:text-green-100">{{ number_format($stockMovement->new_quantity) }} (new stock level)</span>
                                             </div>
                                         @endif
+                                        @if($isSystemAdmin)
                                         <div class="flex items-center gap-3">
                                             <span class="text-green-600 text-lg">✅</span>
                                             <strong class="text-green-900 dark:text-green-100 min-w-[100px]">Cost/Unit:</strong>
@@ -1431,10 +1534,15 @@
                                             <strong class="text-green-900 dark:text-green-100 min-w-[100px]">Total Cost:</strong>
                                             <span class="text-green-900 dark:text-green-100">₱{{ number_format($changes['total_cost'] ?? 0, 2) }} (calculated total)</span>
                                         </div>
-                                        <div class="flex items-center gap-3">
+                                        @endif
+                                        @php
+                                        $requestByUser2 = $selectedHistory->user;
+                                        $isRequestByAdmin2 = $requestByUser2 && $requestByUser2->role === 'system_admin';
+                                    @endphp
+                                    <div class="flex items-center gap-3">
                                             <span class="text-green-600 text-lg">✅</span>
-                                            <strong class="text-green-900 dark:text-green-100 min-w-[100px]">User:</strong>
-                                            <span class="text-green-900 dark:text-green-100">{{ $selectedHistory->user->name }}</span>
+                                            <strong class="text-green-900 dark:text-green-100 min-w-[100px]">{{ $selectedHistory->model === 'tool' ? 'User:' : 'Request by:' }}</strong>
+                                            <span class="{{ $isRequestByAdmin2 ? 'text-orange-600 dark:text-orange-400' : 'text-green-900 dark:text-green-100' }}">{{ $selectedHistory->user->name }}</span>
                                         </div>
                                         <div class="flex items-center gap-3">
                                             <span class="text-green-600 text-lg">✅</span>
@@ -1461,18 +1569,22 @@
                                     } elseif ($selectedHistory->model === 'expense' && $selectedHistory->action === 'update') {
                                         // For expense updates, changes contains only user-editable fields
                                         $changedCount = count($changes);
-                                        $detailsCaptured = $changeCount; // All changes are captured
+                                        $detailsCaptured = $changedCount; // All changes are captured
                                     } elseif ($selectedHistory->model === 'tool' && $selectedHistory->action === 'update') {
                                         // For tool updates, there are 7 user-editable fields always submitted
                                         $changedCount = count($changes);
                                         $detailsCaptured = 7; // quantity, brand, model, description, ownership_type, released_to, release_date
+                                    } elseif ($selectedHistory->model === 'project' && $selectedHistory->action === 'update') {
+                                        // For project updates, show 5 details captured
+                                        $changedCount = count($changes);
+                                        $detailsCaptured = 5;
                                     } else {
                                         // For other models, changes contains only actual changes
                                         $changedCount = count($changes);
-                                        $detailsCaptured = $changeCount;
+                                        $detailsCaptured = $changedCount;
                                     }
                                 @endphp
-                                @if($selectedHistory->action === 'delete')
+                                @if($selectedHistory->action === 'delete' && $selectedHistory->model !== 'tool' && $selectedHistory->model !== 'client')
                                     <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Deletion Summary</h3>
                                 @elseif($selectedHistory->action === 'edit')
                                     @php
@@ -1495,6 +1607,10 @@
                                                 }
                                             }
                                             $detailsCaptured = count($changes) - (isset($changes['total_cost']) ? 1 : 0);
+                                        } elseif ($selectedHistory->model === 'project') {
+                                            // For project edits, show 5 details captured
+                                            $actualChanges = $changedCount;
+                                            $detailsCaptured = 5;
                                         } else {
                                             // Calculate actual changes for edit actions
                                             $oldValues = is_array($selectedHistory->old_values) ? $selectedHistory->old_values : [];
@@ -1529,7 +1645,7 @@
                                         </div>
                                     </div>
                                 @else
-                                    @if($selectedHistory->action === 'delete')
+                                    @if($selectedHistory->action === 'delete' && $selectedHistory->model !== 'tool' && $selectedHistory->model !== 'client')
                                         <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Deletion Summary</h3>
                                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                                             <div class="text-center">
@@ -1545,7 +1661,7 @@
                                                 <div class="text-sm text-gray-600 dark:text-gray-400">Time of Deletion</div>
                                             </div>
                                         </div>
-                                    @else
+                                    @elseif($selectedHistory->action !== 'delete' && !($selectedHistory->model === 'client' && $selectedHistory->action === 'create'))
                                         <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Change Summary</h3>
                                         <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                                             <div class="text-center">
@@ -1647,7 +1763,12 @@
                                     @if(!empty($changes['project']) && $changes['project'] !== 'N/A')
                                         <div>
                                             <span class="font-semibold">Project:</span>
-                                            <p class="mt-1">{{ $changes['project'] }}</p>
+                                            @php
+                                                $displayProject = $changes['project'] ?? 'N/A';
+                                                // Check if project already has reference code in parentheses
+                                                $hasRefInProject = preg_match('/\s*\([^)]+\)$/', $displayProject);
+                                            @endphp
+                                            <p class="mt-1">{{ $displayProject }}{{ !$hasRefInProject && !empty($changes['project_reference_code']) ? ' (' . $changes['project_reference_code'] . ')' : '' }}</p>
                                         </div>
                                     @endif
                                     @if(!empty($changes['material']))

@@ -39,6 +39,7 @@ class Masterlist extends Component
     public ?string $category = '';
     public ?string $quantity = '0';
     public ?string $min_stock_level = '5';
+    public ?string $unit = 'Pcs';
     public $image;
 
     // Filters
@@ -147,6 +148,7 @@ class Masterlist extends Component
             $this->brand = $inventory->brand;
             $this->description = $inventory->description;
             $this->category = $inventory->category;
+            $this->unit = $inventory->unit ?? 'Pcs';
             $this->quantity = (string) $inventory->quantity;
             $this->min_stock_level = (string) $inventory->min_stock_level;
         }
@@ -275,8 +277,9 @@ class Masterlist extends Component
         $this->brand = '';
         $this->description = '';
         $this->category = '';
-        $this->quantity = '0';
-        $this->min_stock_level = '5';
+        $this->unit = 'Pcs';
+        $this->quantity = '';
+        $this->min_stock_level = '';
         $this->image = null;
         $this->editPassword = '';
         $this->activeTab = 'edit';
@@ -367,7 +370,8 @@ class Masterlist extends Component
                 $inventory = $inventories->get($item['inventory_id']);
 
                 // Create approval request first
-                $projectName = $this->project_id ? Project::find($this->project_id)?->name : null;
+                $project = $this->project_id ? Project::find($this->project_id) : null;
+                $projectName = $project ? $project->name . ($project->reference_code ? ' (' . $project->reference_code . ')' : '') : null;
                 $approvalData = [
                     'requested_by' => auth()->id(),
                     'inventory_id' => $inventory->id,
@@ -394,7 +398,14 @@ class Masterlist extends Component
                 if (!$autoApprove) {
                     foreach ($systemAdmins as $admin) {
                         try {
-                            $projectInfo = $this->project_id ? "\nProject: " . Project::find($this->project_id)?->name : '';
+                            $project = $this->project_id ? Project::find($this->project_id) : null;
+                            $projectInfo = '';
+                            if ($project) {
+                                $projectInfo = "\nProject: " . $project->name;
+                                if ($project->reference_code) {
+                                    $projectInfo .= " (" . $project->reference_code . ")";
+                                }
+                            }
                             $chat = Chat::create([
                                 'user_id' => auth()->id(),
                                 'recipient_id' => $admin->id,
@@ -428,67 +439,10 @@ class Masterlist extends Component
                 if ($autoApprove) {
                     $this->processAutoApprovedRelease($approval, $item, $inventory, $client);
                 } else {
-                    // Create history entry for pending approval request
-                    // Capture current stock levels BEFORE any changes
-                    $previousQuantity = $inventory->quantity;
-                    $newQuantity = max(0, $previousQuantity - $item['quantity_used']);
-                    
-                    History::create([
-                        'user_id' => auth()->id(),
-                        'action' => 'Material Release Request Created',
-                        'model' => 'MaterialReleaseApproval',
-                        'model_id' => $approval->id,
-                        'changes' => [
-                            // Release identification
-                            'release_type' => 'approval_based_release',
-                            'approval_id' => $approval->id,
-                            
-                            // Status
-                            'status' => 'pending',
-                            'approval_status' => 'pending',
-                            
-                            // Client and Project information
-                            'client' => $approval->client ?? $client->name ?? 'N/A',
-                            'client_name' => $approval->client ?? $client->name ?? 'N/A',
-                            'project' => $approval->project ?? ($this->project_id ? Project::find($this->project_id)?->name : 'N/A'),
-                            'project_name' => $approval->project ?? ($this->project_id ? Project::find($this->project_id)?->name : 'N/A'),
-                            
-                            // Material/Inventory information
-                            'material' => $inventory->material_name,
-                            'material_brand' => $inventory->brand,
-                            'material_description' => $inventory->description,
-                            'material_category' => $inventory->category,
-                            'inventory_id' => $inventory->id,
-                            
-                            // Quantity and cost information
-                            'quantity' => $item['quantity_used'],
-                            'quantity_requested' => $item['quantity_used'],
-                            'cost_per_unit' => $item['cost_per_unit'],
-                            'total_cost' => round($item['quantity_used'] * (float)$item['cost_per_unit'], 2),
-                            
-                            // Stock levels (projected)
-                            'previous_quantity' => $previousQuantity,
-                            'new_quantity' => $newQuantity,
-                            
-                            // User information - IMPORTANT: Capture requester name
-                            'requested_by' => auth()->user()->name,
-                            'requested_by_id' => auth()->id(),
-                            'requester' => auth()->user()->name,
-                            
-                            // Reason
-                            'reason' => "Material release for client: {$client->name}",
-                            
-                            // Timestamps
-                            'requested_at' => now()->toDateTimeString(),
-                        ],
-                    ]);
-                    
-                    // Broadcast the approval request event
-                    try {
-                        event(new ApprovalRequestCreated($approval));
-                    } catch (\Exception $e) {
-                        \Log::error('Failed to broadcast masterlist approval event: ' . $e->getMessage());
-                    }
+                    // Request sent to system admin for approval - no history entry yet
+                    // History will be recorded when admin approves/releases the material
+                    // See ApprovalManagement.php for approval and release history
+                    // Note: System admins are notified via chat messages (created above at lines 394-419)
                 }
 
                 // Notification removed - using message boxes instead
@@ -555,6 +509,9 @@ class Masterlist extends Component
             $notes = "Released to client: {$client->name}";
             if ($project) {
                 $notes .= " - Project: {$project->name}";
+                if ($project->reference_code) {
+                    $notes .= " (" . $project->reference_code . ")";
+                }
             }
 
             $stockMovement = $inventory->recordStockMovement('outbound', $item['quantity_used'], $requesterId, [
@@ -581,8 +538,9 @@ class Masterlist extends Component
                     // Client and Project
                     'client' => $client->name,
                     'client_name' => $client->name,
-                    'project' => $projectName,
-                    'project_name' => $projectName,
+                    'project' => $approval->project ?? ($project ? $project->name : 'N/A'),
+                    'project_name' => $approval->project ?? ($project ? $project->name : 'N/A'),
+                    'project_reference_code' => $project?->reference_code ?? '',
                     
                     // Material information
                     'inventory_id' => $inventory->id,
@@ -656,7 +614,7 @@ class Masterlist extends Component
             foreach ($this->releaseItems as $item) {
                 $cleanedReleaseItems[] = [
                     'inventory_id' => $item['inventory_id'],
-                    'quantity_used' => (int) str_replace(',', '', $item['quantity_used'] ?? '0'),
+                    'quantity_used' => (float) str_replace(',', '', $item['quantity_used'] ?? '0'),
                     'cost_per_unit' => (float) str_replace(',', '', $item['cost_per_unit'] ?? '0'),
                 ];
             }
@@ -670,7 +628,7 @@ class Masterlist extends Component
                 'client_id' => 'required|exists:clients,id',
                 'releaseItems' => 'required|array|min:1',
                 'releaseItems.*.inventory_id' => 'required|exists:inventories,id',
-                'releaseItems.*.quantity_used' => 'required|integer|min:1',
+                'releaseItems.*.quantity_used' => 'required|numeric|min:0.01',
                 'releaseItems.*.cost_per_unit' => 'required|numeric|min:0',
             ];
 
@@ -731,7 +689,7 @@ class Masterlist extends Component
         ];
 
         if (!$this->editing) {
-            $rules['quantity'] = 'required|string|regex:/^[0-9,]+$/|min:1';
+            $rules['quantity'] = 'required|string|regex:/^[0-9.,]+$/|min:1';
         }
 
         $this->validate($rules);
@@ -765,6 +723,7 @@ class Masterlist extends Component
                     'brand' => $inventory->brand,
                     'description' => $inventory->description,
                     'category' => $inventory->category,
+                    'unit' => $inventory->unit,
                     'quantity' => $inventory->quantity,
                     'min_stock_level' => $inventory->min_stock_level,
                     'status' => $inventory->status
@@ -783,6 +742,7 @@ class Masterlist extends Component
                     'brand' => $this->brand,
                     'description' => $this->description,
                     'category' => $this->category,
+                    'unit' => $this->unit,
                     'quantity' => $currentQuantity, // Keep existing quantity
                     'min_stock_level' => $minStockLevelInt,
                     'status' => $status->value,
@@ -790,7 +750,7 @@ class Masterlist extends Component
     
                 // Check for actual changes (exclude calculated fields like status)
                 $changes = [];
-                $userEditableFields = ['brand', 'description', 'category', 'min_stock_level']; // Fields user can directly edit
+                $userEditableFields = ['brand', 'description', 'category', 'unit', 'min_stock_level']; // Fields user can directly edit
                 foreach ($newValues as $field => $newValue) {
                     if (in_array($field, $userEditableFields) && $oldValues[$field] != $newValue) {
                         $changes[$field] = $newValue;
@@ -827,12 +787,13 @@ class Masterlist extends Component
                     'brand' => $this->brand,
                     'description' => $this->description,
                     'category' => $this->category,
-                    'quantity' => 0, // Start with 0
+                    'quantity' => 0, // Start with 0 temporarily
+                    'unit' => $this->unit,
                     'min_stock_level' => $minStockLevelInt,
-                    'status' => InventoryStatus::OUT_OF_STOCK->value, // Initially out of stock
                 ]);
 
                 // If initial quantity provided, add it as inbound stock
+                // This will create the "Inbound Stock Added" history entry automatically
                 if ($quantityInt > 0) {
                     $inventory->addInboundStock($quantityInt, auth()->id(), [
                         'supplier' => null,
@@ -841,23 +802,23 @@ class Masterlist extends Component
                     ]);
                     // Update status after adding stock
                     $inventory->updateStatus();
+                } else {
+                    // Only log history for creation if no initial quantity
+                    History::create([
+                        'user_id' => auth()->id(),
+                        'action' => 'create',
+                        'model' => 'inventory',
+                        'model_id' => $inventory->id,
+                        'changes' => [
+                            'brand' => $this->brand,
+                            'description' => $this->description,
+                            'category' => $this->category,
+                            'quantity' => 0,
+                            'min_stock_level' => $minStockLevelInt,
+                            'status' => 'out_of_stock',
+                        ],
+                    ]);
                 }
-
-                // Log history for creation
-                History::create([
-                    'user_id' => auth()->id(),
-                    'action' => 'create',
-                    'model' => 'inventory',
-                    'model_id' => $inventory->id,
-                    'changes' => [
-                        'brand' => $this->brand,
-                        'description' => $this->description,
-                        'category' => $this->category,
-                        'quantity' => $quantityInt, // Log the intended quantity
-                        'min_stock_level' => $minStockLevelInt,
-                        'status' => $inventory->status // Use current status after potential update
-                    ],
-                ]);
             }
 
             // Handle image upload
@@ -1060,7 +1021,7 @@ class Masterlist extends Component
         $this->ensureAdmin();
 
         $this->validate([
-            'inboundQuantity' => 'required|string|regex:/^[0-9,]+$/|min:1',
+            'inboundQuantity' => 'required|string|regex:/^[0-9.,]+$/|min:1',
             'supplier' => 'nullable|string|max:255',
             'dateReceived' => 'nullable|date',
             'inboundNotes' => 'nullable|string|max:1000',
@@ -1072,7 +1033,7 @@ class Masterlist extends Component
             return;
         }
 
-        $quantityInt = (int) str_replace(',', '', $this->inboundQuantity);
+        $quantityFloat = (float) str_replace(',', '', $this->inboundQuantity);
 
         $additionalData = [
             'supplier' => $this->supplier ?: null,
@@ -1080,10 +1041,10 @@ class Masterlist extends Component
             'notes' => $this->inboundNotes ?: null,
         ];
 
-        if ($inventory->addInboundStock($quantityInt, auth()->id(), $additionalData)) {
+        if ($inventory->addInboundStock($quantityFloat, auth()->id(), $additionalData)) {
             $this->loadInventories();
             $this->resetInboundForm();
-            session()->flash('message', "Successfully added {$quantityInt} units to inventory.");
+            session()->flash('message', "Successfully added {$quantityFloat} units to inventory.");
             $this->closeModal(); // Close modal after successful stock addition
         } else {
             session()->flash('message', 'Failed to add inbound stock.');

@@ -7,7 +7,7 @@ use Livewire\WithPagination;
 use App\Models\History as HistoryModel;
 
 class History extends Component
-{
+{   
     use WithPagination;
     public $viewMode = 'grid'; // 'grid' or 'table'
     public $showChangeModal = false;
@@ -49,7 +49,10 @@ class History extends Component
 
         // Apply role-based filtering
         if ($user->role === 'system_admin') {
-            // System admins see ALL histories across the system
+            // System admins see ALL histories EXCEPT developer history
+            $query->whereNotIn('user_id', function ($subQuery) use ($user) {
+                $subQuery->select('id')->from('users')->where('role', 'developer');
+            });
         } elseif ($user->role === 'user') {
             // Users see their own histories + all approval request histories
             $query->where(function ($q) use ($user) {
@@ -70,14 +73,70 @@ class History extends Component
                   ->orWhere('model_id', 'like', $searchTerm)
                   ->orWhere('changes', 'like', $searchTerm)
                   ->orWhere('old_values', 'like', $searchTerm)
-                  ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(changes, '$.reference_code')) LIKE ?", [$searchTerm])
-                  ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(changes, '$.project')) LIKE ?", [$searchTerm])
-                  ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(changes, '$.client')) LIKE ?", [$searchTerm])
-                  ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.reference_code')) LIKE ?", [$searchTerm])
-                  ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.project')) LIKE ?", [$searchTerm])
-                  ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.client')) LIKE ?", [$searchTerm])
+                  // Search in JSON changes fields (case-insensitive)
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.reference_code'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.project'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.project_name'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.project_reference_code'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.client'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.client_name'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.material'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.material_brand'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.material_description'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.material_category'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.status'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.approval_status'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.release_type'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.quantity'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.quantity_requested'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.cost_per_unit'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.total_cost'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.price'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.unit_price'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.amount'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.subtotal'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.grand_total'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.overall_cost'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.budget'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.actual_cost'))) LIKE LOWER(?)", [$searchTerm])
+                  // Name fields
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.created_by'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.updated_by'))) LIKE LOWER(?)", [$searchTerm])
+                  // Other fields
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.notes'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.description'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.category'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.branch'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.contact_person'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.requester'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.requested_by'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.reviewer'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.approved_by'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.reason'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.review_notes'))) LIKE LOWER(?)", [$searchTerm])
+                  // Search in old_values JSON (case-insensitive)
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.reference_code'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.project'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.client'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.status'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.quantity'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.cost_per_unit'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.total_cost'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.price'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.unit_price'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.amount'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.budget'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.overall_cost'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.actual_cost'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.category'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.branch'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.notes'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.description'))) LIKE LOWER(?)", [$searchTerm])
+                  // Search by date
                   ->orWhereRaw("DATE_FORMAT(created_at, '%M %d, %Y') LIKE ?", [$searchTerm])
                   ->orWhereRaw("DATE_FORMAT(created_at, '%M %d, %Y - %h:%i %p') LIKE ?", [$searchTerm])
+                  ->orWhereRaw("DATE(created_at) LIKE ?", [$searchTerm])
+                  // Search by user name (case-insensitive via collation)
                   ->orWhereHas('user', function ($userQuery) use ($searchTerm) {
                       $userQuery->where('name', 'like', $searchTerm);
                   })
@@ -119,7 +178,8 @@ class History extends Component
                           ->whereHas('inventoryRelation', function ($i) use ($searchTerm) {
                               $i->where('brand', 'like', $searchTerm)
                                 ->orWhere('description', 'like', $searchTerm)
-                                ->orWhere('category', 'like', $searchTerm);
+                                ->orWhere('category', 'like', $searchTerm)
+                                ->orWhere('unit', 'like', $searchTerm);
                           });
                   })
                   // Search in related expense inventory data
@@ -128,7 +188,8 @@ class History extends Component
                           ->whereHas('expenseRelation.inventory', function ($i) use ($searchTerm) {
                               $i->where('brand', 'like', $searchTerm)
                                 ->orWhere('description', 'like', $searchTerm)
-                                ->orWhere('category', 'like', $searchTerm);
+                                ->orWhere('category', 'like', $searchTerm)
+                                ->orWhere('unit', 'like', $searchTerm);
                           });
                   })
                   // Search in approval-related data
@@ -144,7 +205,15 @@ class History extends Component
                           })
                           ->orWhereHas('approvalRelation.inventory', function ($i) use ($searchTerm) {
                               $i->where('brand', 'like', $searchTerm)
-                                ->orWhere('description', 'like', $searchTerm);
+                                ->orWhere('description', 'like', $searchTerm)
+                                ->orWhere('category', 'like', $searchTerm)
+                                ->orWhere('unit', 'like', $searchTerm);
+                          })
+                          ->orWhereHas('approvalRelation.expense.inventory', function ($i) use ($searchTerm) {
+                              $i->where('brand', 'like', $searchTerm)
+                                ->orWhere('description', 'like', $searchTerm)
+                                ->orWhere('category', 'like', $searchTerm)
+                                ->orWhere('unit', 'like', $searchTerm);
                           });
                   });
             });
@@ -171,7 +240,10 @@ class History extends Component
         $historiesQuery = HistoryModel::query();
 
         if ($user->role === 'system_admin') {
-            // System admins see ALL histories across the system
+            // System admins see ALL histories EXCEPT developer history
+            $historiesQuery->whereNotIn('user_id', function ($subQuery) use ($user) {
+                $subQuery->select('id')->from('users')->where('role', 'developer');
+            });
         } elseif ($user->role === 'user') {
             // Users see their own histories + all approval request histories
             $historiesQuery->where(function ($query) use ($user) {
@@ -258,7 +330,7 @@ class History extends Component
         $this->relatedMovements = [
             'client_name' => $approval->expense->client?->name ?? 'N/A',
             'project_name' => $approval->expense->project?->name ?? null,
-            'movements' => $movements->toArray()
+            'movements' => $movements
         ];
 
         $this->showRelatedMovementsModal = true;
@@ -268,48 +340,6 @@ class History extends Component
     {
         $this->showRelatedMovementsModal = false;
         $this->relatedMovements = null;
-    }
-
-    public function addTestInboundStock()
-    {
-        // Create or get test inventory
-        $inventory = \App\Models\Inventory::where('brand', 'TEST INVENTORY')
-            ->where('description', 'FOR HISTORY TESTING')
-            ->first();
-
-        if (!$inventory) {
-            $inventory = \App\Models\Inventory::create([
-                'brand' => 'TEST INVENTORY',
-                'description' => 'FOR HISTORY TESTING',
-                'category' => 'Laser Room',
-                'quantity' => 0,
-                'min_stock_level' => 5,
-            ]);
-        }
-
-        // Add test inbound stock
-        $quantity = rand(5, 20);
-        $costPerUnit = rand(10, 50) + 0.99;
-
-        $result = $inventory->addInboundStock($quantity, auth()->id(), [
-            'cost_per_unit' => $costPerUnit,
-            'total_cost' => $quantity * $costPerUnit,
-            'supplier' => 'Test Supplier Inc.',
-            'location' => 'Laser Room',
-            'notes' => 'Test inbound stock addition from History page',
-        ]);
-
-        if ($result) {
-            session()->flash('success', "✅ Test stock added successfully! {$quantity} units added to {$inventory->brand}. Check the new 'Inbound Added Stock' entry below.");
-            // Close any open modal
-            $this->showChangeModal = false;
-            $this->selectedHistory = null;
-        } else {
-            session()->flash('error', '❌ Failed to add test stock.');
-        }
-
-        // Refresh the component
-        $this->dispatch('refreshHistory');
     }
 
     public function createStockMovementFromHistory($historyId)

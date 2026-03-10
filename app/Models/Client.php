@@ -42,7 +42,8 @@ class Client extends Model
         'status',
         'image_blob',
         'image_mime_type',
-        'image_filename'
+        'image_filename',
+        'image_url'
     ];
     
     /**
@@ -66,7 +67,7 @@ class Client extends Model
     /**
      * Valid job types for clients.
      */
-    public const JOB_TYPES = ['service', 'installation'];
+    public const JOB_TYPES = ['service', 'installation', 'delivery', 'repair'];
 
     /**
      * Valid status values for clients.
@@ -181,13 +182,28 @@ class Client extends Model
     }
 
     /**
-     * Get the logo URL (blob or fallback).
+     * Get the logo URL (image_url, blob or fallback).
      *
      * @return string
      */
     public function getLogoUrlAttribute(): string
     {
+        // Prioritize image_url over blob
+        if (!empty($this->image_url)) {
+            return $this->image_url;
+        }
+        
         return $this->image_blob ?: asset('images/no-image.png');
+    }
+
+    /**
+     * Check if the client has an image URL.
+     *
+     * @return bool
+     */
+    public function hasImageUrl(): bool
+    {
+        return !empty($this->image_url);
     }
 
     /**
@@ -198,6 +214,16 @@ class Client extends Model
     public function hasImageBlob(): bool
     {
         return !empty($this->image_blob);
+    }
+
+    /**
+     * Check if the client has any image (URL or blob).
+     *
+     * @return bool
+     */
+    public function hasImage(): bool
+    {
+        return $this->hasImageUrl() || $this->hasImageBlob();
     }
 
     /**

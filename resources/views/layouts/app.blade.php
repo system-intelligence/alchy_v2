@@ -15,7 +15,7 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @livewireStyles
 </head>
-<body class="font-sans antialiased bg-[#101828] text-gray-100">
+<body class="font-sans antialiased bg-[#101828] text-gray-100 text-xs sm:text-sm md:text-base">
     <div class="h-screen w-full flex overflow-hidden">
         <!-- Sidebar -->
         <div id="sidebar" class="bg-[#101828] shadow-xl w-64 h-full fixed inset-y-0 left-0 transform -translate-x-full lg:translate-x-0 transition-transform duration-300 ease-in-out z-30 border-r border-[#1B2537]">
@@ -31,54 +31,54 @@
                         </div>
                     </div>
                 </div>
-                <nav class="flex-1 mt-8 px-4 pb-24 overflow-y-auto">
-                    <div class="mb-6">
-                        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Navigation</p>
+                <nav class="flex-1 mt-6 px-3 pb-20 overflow-y-auto">
+                    <div class="mb-4">
+                        <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Navigation</p>
                         <div class="space-y-1">
                             <a href="{{ route('dashboard') }}" @class([
-                                'flex items-center py-3 px-3 rounded-lg transition duration-200 text-gray-300 hover:text-primary-400 hover:bg-[#172033]',
+                                'flex items-center py-2 px-2 md:py-3 md:px-3 rounded-lg transition duration-200 text-gray-300 hover:text-primary-400 hover:bg-[#172033]',
                                 'bg-[#172033] text-primary-400 border-r-2 border-primary-500' => request()->routeIs('dashboard'),
                             ])>
-                                <x-heroicon-o-home class="w-5 h-5 mr-3" />
-                                Dashboard
+                                <x-heroicon-o-home class="w-4 h-4 md:w-5 md:h-5 mr-2 md:mr-3" />
+                                <span class="text-xs md:text-sm">Dashboard</span>
                             </a>
                             <a href="{{ route('masterlist') }}" @class([
-                                'flex items-center py-3 px-3 rounded-lg transition duration-200 text-gray-300 hover:text-primary-400 hover:bg-[#172033]',
+                                'flex items-center py-2 px-2 md:py-3 md:px-3 rounded-lg transition duration-200 text-gray-300 hover:text-primary-400 hover:bg-[#172033]',
                                 'bg-[#172033] text-primary-400 border-r-2 border-primary-500' => request()->routeIs('masterlist'),
                             ])>
-                                <x-heroicon-o-queue-list class="w-5 h-5 mr-3" />
-                                Masterlist
+                                <x-heroicon-o-queue-list class="w-4 h-4 md:w-5 md:h-5 mr-2 md:mr-3" />
+                                <span class="text-xs md:text-sm">Masterlist</span>
                             </a>
                             <a href="{{ route('history') }}" @class([
-                                'flex items-center py-3 px-3 rounded-lg transition duration-200 text-gray-300 hover:text-primary-400 hover:bg-[#172033]',
+                                'flex items-center py-2 px-2 md:py-3 md:px-3 rounded-lg transition duration-200 text-gray-300 hover:text-primary-400 hover:bg-[#172033]',
                                 'bg-[#172033] text-primary-400 border-r-2 border-primary-500' => request()->routeIs('history'),
                             ])>
-                                <x-heroicon-o-clock class="w-5 h-5 mr-3" />
-                                History
+                                <x-heroicon-o-clock class="w-4 h-4 md:w-5 md:h-5 mr-2 md:mr-3" />
+                                <span class="text-xs md:text-sm">History</span>
                             </a>
                             <a href="{{ route('tools') }}" @class([
-                                'flex items-center py-3 px-3 rounded-lg transition duration-200 text-gray-300 hover:text-primary-400 hover:bg-[#172033]',
+                                'flex items-center py-2 px-2 md:py-3 md:px-3 rounded-lg transition duration-200 text-gray-300 hover:text-primary-400 hover:bg-[#172033]',
                                 'bg-[#172033] text-primary-400 border-r-2 border-primary-500' => request()->routeIs('tools'),
                             ])>
-                                <x-heroicon-o-wrench-screwdriver class="w-5 h-5 mr-3" />
-                                Tools & Equipment
+                                <x-heroicon-o-wrench-screwdriver class="w-4 h-4 md:w-5 md:h-5 mr-2 md:mr-3" />
+                                <span class="text-xs md:text-sm">Tools</span>
                             </a>
                             @if(auth()->user()->isSystemAdmin())
                             <a href="{{ route('expenses') }}" @class([
-                                'flex items-center py-3 px-3 rounded-lg transition duration-200 text-gray-300 hover:text-primary-400 hover:bg-[#172033]',
+                                'flex items-center py-2 px-2 md:py-3 md:px-3 rounded-lg transition duration-200 text-gray-300 hover:text-primary-400 hover:bg-[#172033]',
                                 'bg-[#172033] text-primary-400 border-r-2 border-primary-500' => request()->routeIs('expenses'),
                             ])>
-                                <x-heroicon-o-currency-dollar class="w-5 h-5 mr-3" />
-                                Expenses
+                                <x-heroicon-o-currency-dollar class="w-4 h-4 md:w-5 md:h-5 mr-2 md:mr-3" />
+                                <span class="text-xs md:text-sm">Expenses</span>
                             </a>
                             @endif
                             @if(auth()->user()->isDeveloper())
                             <a href="{{ route('developer.user-management') }}" @class([
-                                'flex items-center py-3 px-3 rounded-lg transition duration-200 text-gray-300 hover:text-primary-400 hover:bg-[#172033]',
+                                'flex items-center py-2 px-2 md:py-3 md:px-3 rounded-lg transition duration-200 text-gray-300 hover:text-primary-400 hover:bg-[#172033]',
                                 'bg-[#172033] text-primary-400 border-r-2 border-primary-500' => request()->routeIs('developer.user-management'),
                             ])>
-                                <x-heroicon-o-users class="w-5 h-5 mr-3" />
-                                User Management
+                                <x-heroicon-o-users class="w-4 h-4 md:w-5 md:h-5 mr-2 md:mr-3" />
+                                <span class="text-xs md:text-sm">User Management</span>
                             </a>
                             @endif
                         </div>
@@ -90,9 +90,17 @@
                                 'flex items-center py-3 px-3 rounded-lg transition duration-200 text-gray-300 hover:text-primary-400 hover:bg-[#172033]',
                                 'bg-[#172033] text-primary-400 border-r-2 border-primary-500' => request()->routeIs('profile.edit'),
                             ])>
-                                <x-heroicon-o-user class="w-5 h-5 mr-3" />
+                                <svg class="w-5 h-5 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"></path>
+                                </svg>
                                 Profile
                             </a>
+                            <button onclick="toggleAppFullscreen()" class="w-full flex items-center py-3 px-3 rounded-lg transition duration-200 text-gray-300 hover:text-primary-400 hover:bg-[#172033]">
+                                <svg class="w-5 h-5 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                </svg>
+                                Full Screen
+                            </button>
                         </div>
                     </div>
                 </nav>
@@ -118,8 +126,8 @@
                             <x-heroicon-o-bars-3 class="w-6 h-6" />
                         </button>
                         <div>
-                            <h2 class="text-lg font-semibold text-gray-100">{{ $title ?? 'Dashboard' }}</h2>
-                            <p class="text-sm text-gray-400">{{ $subtitle ?? 'Welcome back, ' . auth()->user()->name }}</p>
+                            <h2 class="text-sm md:text-lg font-semibold text-gray-100">{{ $title ?? 'Dashboard' }}</h2>
+                            <p class="text-[10px] md:text-sm text-gray-400">{{ $subtitle ?? 'Welcome back, ' . auth()->user()->name }}</p>
                         </div>
                     </div>
                     <div class="flex items-center space-x-2">
@@ -139,7 +147,7 @@
             </header>
 
             <!-- Page content -->
-            <main class="flex-1 p-6 bg-[#101828] overflow-y-auto">
+            <main class="flex-1 p-3 md:p-6 bg-[#101828] overflow-y-auto">
                 @yield('content')
             </main>
         </div>
@@ -152,6 +160,36 @@
         document.getElementById('sidebar-toggle').addEventListener('click', function() {
             document.getElementById('sidebar').classList.toggle('-translate-x-full');
         });
+
+        // Fullscreen toggle function
+        function toggleAppFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        // Update button based on fullscreen state
+        function updateFullscreenButton() {
+            var btn = document.querySelector('button[onclick="toggleAppFullscreen()"]');
+            if (!btn) return;
+            
+            if (document.fullscreenElement) {
+                btn.innerHTML = '<svg class="w-5 h-5 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" /></svg> Exit Full Screen';
+            } else {
+                btn.innerHTML = '<svg class="w-5 h-5 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg> Full Screen';
+            }
+        }
+
+        // Listen for fullscreen changes
+        document.addEventListener('fullscreenchange', updateFullscreenButton);
+
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', updateFullscreenButton);
+        if (window.Livewire) {
+            Livewire.hook('message.processed', updateFullscreenButton);
+        }
 
         // Auto-join presence channel for all authenticated users
         document.addEventListener('livewire:initialized', () => {

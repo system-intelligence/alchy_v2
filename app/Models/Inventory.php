@@ -42,6 +42,7 @@ class Inventory extends Model
         'description',
         'category',
         'quantity',
+        'unit',
         'status',
         'min_stock_level',
         'image_blob',
@@ -64,12 +65,19 @@ class Inventory extends Model
     public const CATEGORIES = ['Bodega Room', 'IT Room', 'Laser Room', 'LED Room', 'Office Material Room'];
 
     /**
+     * Valid unit values for inventory items.
+     */
+    public const UNITS = ['Pcs', 'Boxes', 'Bundles', 'Reams', 'Packs', 'Sets', 'Liters', 'Kilograms', 'Meters', 'Rolls', 'Sheets', 'Pairs'];
+
+    /**
      * Attribute casting configuration.
      *
      * @var array<string, mixed>
      */
     protected $casts = [
         'status' => InventoryStatus::class,
+        'quantity' => 'decimal:2',
+        'min_stock_level' => 'decimal:2',
     ];
 
     /**
@@ -319,24 +327,24 @@ class Inventory extends Model
      * Record a stock movement.
      *
      * @param string $movementType
-     * @param int $quantity
+     * @param float|int $quantity
      * @param int $userId
      * @param array $additionalData
      * @return \App\Models\StockMovement
      */
-    public function recordStockMovement(string $movementType, int $quantity, int $userId, array $additionalData = [], ?int $previousQuantity = null): StockMovement
+    public function recordStockMovement(string $movementType, float|int $quantity, int $userId, array $additionalData = [], ?float $previousQuantity = null): StockMovement
     {
         // If previous quantity not provided, try to get it from the original attributes
         if ($previousQuantity === null) {
-            $previousQuantity = $this->getOriginal('quantity');
+            $previousQuantity = (float) $this->getOriginal('quantity');
             if ($previousQuantity === null) {
                 // If no original, assume current quantity minus the change
-                $previousQuantity = $this->quantity - $quantity;
+                $previousQuantity = (float) $this->quantity - (float) $quantity;
             }
         }
 
         // Ensure new_quantity reflects the current state after the change
-        $newQuantity = $this->quantity;
+        $newQuantity = (float) $this->quantity;
 
         return StockMovement::create([
             'inventory_id' => $this->id,
@@ -355,14 +363,14 @@ class Inventory extends Model
     /**
      * Add inbound stock.
      *
-     * @param int $quantity
+     * @param float|int $quantity
      * @param int $userId
      * @param array $additionalData
      * @return bool
      */
-    public function addInboundStock(int $quantity, int $userId, array $additionalData = []): bool
+    public function addInboundStock(float|int $quantity, int $userId, array $additionalData = []): bool
     {
-        $previousQuantity = $this->quantity;
+        $previousQuantity = (float) $this->quantity;
         $this->quantity += $quantity;
         if ($this->save()) {
             // Record stock movement first

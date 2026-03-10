@@ -346,22 +346,22 @@
         
         <!-- Centered Chat Modal -->
         <div class="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
-            <div class="bg-gradient-to-br from-[#0a0f1a] to-[#1a1f2e] border-2 border-red-500/30 rounded-2xl shadow-2xl w-full max-w-6xl h-[95vh] sm:h-[90vh] max-h-[850px] flex overflow-hidden backdrop-blur-xl">
-                <!-- Sidebar -->
-                <div class="w-2/5 sm:w-1/3 min-w-[180px] max-w-[350px] border-r border-red-500/20 flex flex-col bg-[#0d1117]/50 overflow-hidden">
-                <div class="p-3 sm:p-4 border-b border-red-500/20 bg-gradient-to-r from-red-900/20 to-red-800/10 flex-shrink-0">
-                    <input type="text" wire:model.live="search" placeholder="Search..." class="w-full px-3 sm:px-4 py-2 sm:py-2.5 bg-[#1a1f2e] border border-red-500/30 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 text-xs sm:text-sm text-gray-200 placeholder-gray-500 transition-all">
+            <div class="bg-gradient-to-br from-[#0a0f1a] to-[#1a1f2e] border-2 border-red-500/30 rounded-2xl shadow-2xl w-full h-[95vh] sm:h-[90vh] sm:max-h-[850px] sm:max-w-6xl flex overflow-hidden backdrop-blur-xl">
+                <!-- Sidebar (hidden on mobile when chat selected) -->
+                <div class="hidden sm:flex w-1/3 min-w-[180px] max-w-[350px] border-r border-red-500/20 flex flex-col bg-[#0d1117]/50 overflow-hidden">
+                <div class="p-2 sm:p-3 border-b border-red-500/20 bg-gradient-to-r from-red-900/20 to-red-800/10 flex-shrink-0">
+                    <input type="text" wire:model.live="search" placeholder="Search..." class="w-full px-2 sm:px-4 py-1.5 sm:py-2 bg-[#1a1f2e] border border-red-500/30 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 text-xs sm:text-sm text-gray-200 placeholder-gray-500 transition-all">
                 </div>
                 <div class="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-red-500/50 scrollbar-track-transparent">
                     <!-- Group Chat Option -->
-                    <div wire:click="selectGroupChat" class="p-2.5 sm:p-3 hover:bg-red-500/10 cursor-pointer border-b-2 border-red-500/30 transition-all duration-200 {{ $isGroupChat ? 'bg-gradient-to-r from-red-500/20 to-red-600/10 border-l-4 border-l-red-500' : '' }}">
+                    <div wire:click="selectGroupChat" class="p-2 sm:p-3 hover:bg-red-500/10 cursor-pointer border-b-2 border-red-500/30 transition-all duration-200 {{ $isGroupChat ? 'bg-gradient-to-r from-red-500/20 to-red-600/10 border-l-4 border-l-red-500' : '' }}">
                         <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
-                            <div class="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-full flex items-center justify-center border-2 border-yellow-400/50 shadow-lg shadow-yellow-500/30 flex-shrink-0">
-                                <x-heroicon-o-user-group class="w-5 h-5 text-white" />
+                            <div class="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-full flex items-center justify-center border-2 border-yellow-400/50 shadow-lg shadow-yellow-500/30 flex-shrink-0">
+                                <x-heroicon-o-user-group class="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                             </div>
                             <div class="flex-1 min-w-0">
-                                <p class="text-sm font-semibold text-gray-100 truncate">IT Department</p>
-                                <p class="text-xs text-gray-400">Everyone in the system</p>
+                                <p class="text-sm sm:text-base font-semibold text-gray-100 truncate">IT Department</p>
+                                <p class="text-xs text-gray-400">Everyone</p>
                             </div>
                             @if($groupUnreadCount > 0 && !$isGroupChat)
                                 <sup class="ml-auto inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-gradient-to-r from-yellow-500 to-orange-600 text-white text-[10px] font-bold shadow-lg shadow-yellow-500/50 animate-pulse">
@@ -373,17 +373,17 @@
                     
                     <!-- Individual Users -->
                     @foreach($users as $user)
-                        <div wire:click="selectUser({{ $user->id }})" class="p-2.5 sm:p-3 hover:bg-red-500/10 cursor-pointer border-b border-red-500/10 transition-all duration-200 {{ $selectedUser && $selectedUser->id == $user->id ? 'bg-gradient-to-r from-red-500/20 to-red-600/10 border-l-4 border-l-red-500' : '' }}">
+                        <div wire:click="selectUser({{ $user->id }})" class="p-2 sm:p-3 hover:bg-red-500/10 cursor-pointer border-b border-red-500/10 transition-all duration-200 {{ $selectedUser && $selectedUser->id == $user->id ? 'bg-gradient-to-r from-red-500/20 to-red-600/10 border-l-4 border-l-red-500' : '' }}">
                             <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
                                 @if($user->hasAvatarBlob())
-                                    <img src="{{ $user->avatar_url }}" alt="{{ $user->name }}" class="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover border-2 border-red-500/50 ring-2 ring-red-500/20 flex-shrink-0">
+                                    <img src="{{ $user->avatar_url }}" alt="{{ $user->name }}" class="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-red-500/50 ring-2 ring-red-500/20 flex-shrink-0">
                                 @else
-                                    <div class="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center border-2 border-red-400/50 shadow-lg shadow-red-500/30 flex-shrink-0">
-                                        <span class="text-white text-sm font-bold">{{ strtoupper(substr($user->name, 0, 1)) }}</span>
+                                    <div class="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center border-2 border-red-400/50 shadow-lg shadow-red-500/30 flex-shrink-0">
+                                        <span class="text-white text-sm sm:text-base font-bold">{{ strtoupper(substr($user->name, 0, 1)) }}</span>
                                     </div>
                                 @endif
                                 <div class="flex-1 min-w-0">
-                                    <p class="text-sm font-semibold text-gray-100 truncate">{{ $user->name }}</p>
+                                    <p class="text-sm sm:text-base font-semibold text-gray-100 truncate">{{ $user->name }}</p>
                                     <p class="text-xs text-gray-400 capitalize">{{ str_replace('_', ' ', $user->role) }}</p>
                                 </div>
                                 @php($count = $unreadCounts[$user->id] ?? 0)
@@ -400,10 +400,66 @@
 
             <!-- Chat Area -->
             <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
-                <div class="bg-gradient-to-r from-red-600 via-red-500 to-red-600 text-white p-3 sm:p-4 rounded-tr-2xl flex justify-between items-center shadow-lg flex-shrink-0">
-                    <div class="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
+                <!-- Mobile User List (shown at top on mobile, hidden when chat selected) -->
+                <div class="sm:hidden flex-shrink-0 border-b border-red-500/20 {{ $isGroupChat || $selectedUser ? 'hidden' : '' }}">
+                    <div class="p-2 bg-gradient-to-r from-red-600 via-red-500 to-red-600 flex-shrink-0">
+                        <span class="font-bold text-white text-sm ml-1">Select Chat</span>
+                    </div>
+                    <div class="overflow-y-auto max-h-[40vh] scrollbar-thin scrollbar-thumb-red-500/50 scrollbar-track-transparent">
+                        <!-- Group Chat Option -->
+                        <div wire:click="selectGroupChat" class="p-2 sm:p-3 hover:bg-red-500/10 cursor-pointer border-b-2 border-red-500/30 transition-all duration-200 {{ $isGroupChat ? 'bg-gradient-to-r from-red-500/20 to-red-600/10 border-l-4 border-l-red-500' : '' }}">
+                            <div class="flex items-center space-x-3 min-w-0">
+                                <div class="w-10 h-10 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-full flex items-center justify-center border-2 border-yellow-400/50 shadow-lg shadow-yellow-500/30 flex-shrink-0">
+                                    <x-heroicon-o-user-group class="w-5 h-5 text-white" />
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-sm font-semibold text-gray-100 truncate">IT Department</p>
+                                    <p class="text-xs text-gray-400">Everyone</p>
+                                </div>
+                                @if($groupUnreadCount > 0 && !$isGroupChat)
+                                    <sup class="ml-auto inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-gradient-to-r from-yellow-500 to-orange-600 text-white text-[10px] font-bold shadow-lg shadow-yellow-500/50 animate-pulse">
+                                        {{ $groupUnreadCount }}
+                                    </sup>
+                                @endif
+                            </div>
+                        </div>
+                        
+                        <!-- Individual Users -->
+                        @foreach($users as $user)
+                            <div wire:click="selectUser({{ $user->id }})" class="p-2 sm:p-3 hover:bg-red-500/10 cursor-pointer border-b border-red-500/10 transition-all duration-200 {{ $selectedUser && $selectedUser->id == $user->id ? 'bg-gradient-to-r from-red-500/20 to-red-600/10 border-l-4 border-l-red-500' : '' }}">
+                                <div class="flex items-center space-x-3 min-w-0">
+                                    @if($user->hasAvatarBlob())
+                                        <img src="{{ $user->avatar_url }}" alt="{{ $user->name }}" class="w-10 h-10 rounded-full object-cover border-2 border-red-500/50 ring-2 ring-red-500/20 flex-shrink-0">
+                                    @else
+                                        <div class="w-10 h-10 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center border-2 border-red-400/50 shadow-lg shadow-red-500/30 flex-shrink-0">
+                                            <span class="text-white text-sm font-bold">{{ strtoupper(substr($user->name, 0, 1)) }}</span>
+                                        </div>
+                                    @endif
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-sm font-semibold text-gray-100 truncate">{{ $user->name }}</p>
+                                        <p class="text-xs text-gray-400 capitalize">{{ str_replace('_', ' ', $user->role) }}</p>
+                                    </div>
+                                    @php($count = $unreadCounts[$user->id] ?? 0)
+                                    @if($count > 0 && (! $selectedUser || $selectedUser->id != $user->id))
+                                        <sup class="ml-auto inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-gradient-to-r from-red-500 to-red-600 text-white text-[10px] font-bold shadow-lg shadow-red-500/50 animate-pulse">
+                                            {{ $count }}
+                                        </sup>
+                                    @endif
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+
+                <!-- Chat Header -->
+                <div class="bg-gradient-to-r from-red-600 via-red-500 to-red-600 text-white p-2 sm:p-4 {{ !$isGroupChat && !$selectedUser ? 'rounded-tr-2xl' : '' }} flex justify-between items-center shadow-lg flex-shrink-0">
+                    <div class="flex items-center space-x-2 min-w-0 flex-1">
+                        <!-- Back button for mobile -->
+                        <button wire:click="goBackToChatList" class="sm:hidden text-white hover:bg-white/20 p-1.5 rounded-lg transition-all duration-200 mr-1 {{ $isGroupChat || $selectedUser ? '' : 'hidden' }}">
+                            <x-heroicon-o-arrow-left class="w-4 h-4" />
+                        </button>
                         <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse shadow-lg shadow-green-400/50 flex-shrink-0"></div>
-                        <span class="font-bold text-base sm:text-lg truncate">
+                        <span class="font-bold text-sm sm:text-lg truncate">
                             @if($isGroupChat)
                                 IT Department
                             @elseif($selectedUser)
@@ -413,14 +469,14 @@
                             @endif
                         </span>
                     </div>
-                    <button wire:click="toggleChat" class="text-white hover:bg-white/20 p-2 rounded-lg transition-all duration-200">
-                        <x-heroicon-o-x-mark class="w-5 h-5" />
+                    <button wire:click="toggleChat" class="text-white hover:bg-white/20 p-1.5 sm:p-2 rounded-lg transition-all duration-200">
+                        <x-heroicon-o-x-mark class="w-4 h-4 sm:w-5 sm:h-5" />
                     </button>
                 </div>
 
                 @if($isGroupChat || $selectedUser)
-                    <div
-                        class="flex-1 p-3 sm:p-4 overflow-y-auto overflow-x-hidden bg-[#0d1117] scrollbar-thin scrollbar-thumb-red-500/50 scrollbar-track-transparent"
+                    <div class="flex-1 flex flex-col min-w-0 overflow-hidden h-0">
+                        <div class="flex-1 p-3 sm:p-4 overflow-y-auto overflow-x-hidden bg-[#0d1117] scrollbar-thin scrollbar-thumb-red-500/50 scrollbar-track-transparent"
                         id="messages-container"
                         wire:loading.class="opacity-50"
                         x-ref="mc"
@@ -430,8 +486,8 @@
                         @messageReceived.window="$nextTick(() => { $refs.mc && ($refs.mc.scrollTop = $refs.mc.scrollHeight) })"
                     >
                         @foreach($messages as $message)
-                            <div class="flex {{ $message->user_id == auth()->id() ? 'justify-end' : 'justify-start' }} mb-2.5">
-                                <div class="p-2.5 sm:p-3 rounded-2xl min-w-[60px] max-w-[85%] sm:max-w-[80%] lg:max-w-[75%] shadow-lg {{ $message->user_id == auth()->id() ? 'bg-gradient-to-br from-red-500 to-red-600 text-white shadow-red-500/30' : 'bg-gradient-to-br from-gray-700 to-gray-800 text-gray-100 shadow-gray-900/50' }}">
+                            <div class="flex {{ $message->user_id == auth()->id() ? 'justify-end' : 'justify-start' }} mb-3 sm:mb-4 px-2 sm:px-4">
+                                <div class="p-3 sm:p-5 rounded-2xl min-w-[100px] max-w-[90%] sm:max-w-[75%] lg:max-w-[65%] shadow-lg {{ $message->user_id == auth()->id() ? 'bg-gradient-to-br from-red-500 to-red-600 text-white shadow-red-500/30' : 'bg-gradient-to-br from-gray-700 to-gray-800 text-gray-100 shadow-gray-900/50' }}">
                                     <div class="text-[10px] opacity-75 mb-1 font-medium truncate">{{ $message->user->name }}</div>
                                     <div class="text-sm leading-relaxed break-words whitespace-pre-wrap overflow-wrap-anywhere">{{ $message->message }}</div>
                                     <div class="text-[10px] opacity-70 mt-1.5 text-right">{{ $message->created_at->diffForHumans() }}</div>
@@ -480,7 +536,18 @@
                         </form>
                     </div>
                 @else
-                    <div class="flex-1 flex items-center justify-center bg-[#0d1117]">
+                    <!-- Mobile placeholder when no chat selected -->
+                    <div class="sm:hidden flex-1 flex items-center justify-center bg-[#0d1117]">
+                        <div class="text-center px-4">
+                            <div class="relative inline-block mb-4">
+                                <x-heroicon-o-chat-bubble-left-right class="w-16 h-16 mx-auto text-red-500/30" />
+                                <div class="absolute inset-0 bg-red-500/10 blur-xl rounded-full"></div>
+                            </div>
+                            <p class="text-gray-400 text-sm">Select a chat to start messaging</p>
+                        </div>
+                    </div>
+                    <!-- Desktop placeholder when no chat selected -->
+                    <div class="hidden sm:flex flex-1 items-center justify-center bg-[#0d1117]">
                         <div class="text-center">
                             <div class="relative inline-block mb-4">
                                 <x-heroicon-o-chat-bubble-left-right class="w-20 h-20 mx-auto text-red-500/30" />
@@ -494,8 +561,8 @@
         </div>
     @else
         @php($__totalUnread = array_sum($unreadCounts ?? []) + ($groupUnreadCount ?? 0))
-        <button wire:click="toggleChat" class="relative bg-red-500 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg hover:bg-red-600 transition-all duration-200">
-            <x-heroicon-o-chat-bubble-left-right class="w-7 h-7" />
+        <button wire:click="toggleChat" class="relative bg-red-500 text-white rounded-full w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center shadow-lg hover:bg-red-600 transition-all duration-200">
+            <x-heroicon-o-chat-bubble-left-right class="w-6 h-6 sm:w-7 sm:h-7" />
             @if($__totalUnread > 0)
                 <sup class="absolute -top-2 -right-2 inline-flex items-center justify-center min-w-[1.5rem] h-6 px-2 rounded-full bg-yellow-400 text-gray-900 text-xs font-bold shadow-lg border-2 border-white animate-pulse">
                     {{ $__totalUnread > 99 ? '99+' : $__totalUnread }}
@@ -568,7 +635,39 @@
 </div>
 
 <script>
+function toggleFullscreen() {
+    // Find the chat modal container - the main flex container with gradient background
+    const chatModal = document.querySelector('.bg-gradient-to-br.from-\[\#0a0f1a\]');
+    
+    if (!chatModal) {
+        console.error('Chat modal not found');
+        return;
+    }
+    
+    if (document.fullscreenElement) {
+        document.exitFullscreen();
+    } else {
+        chatModal.requestFullscreen().catch(err => {
+            console.error('Fullscreen error:', err);
+        });
+    }
+}
+
 document.addEventListener('livewire:loaded', () => {
+    // Listen for fullscreen changes to update icon
+    document.addEventListener('fullscreenchange', () => {
+        const buttons = document.querySelectorAll('button[onclick*="toggleFullscreen"]');
+        buttons.forEach(btn => {
+            if (document.fullscreenElement) {
+                btn.innerHTML = '<svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>';
+                btn.setAttribute('title', 'Exit Fullscreen');
+            } else {
+                btn.innerHTML = '<svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>';
+                btn.setAttribute('title', 'Fullscreen');
+            }
+        });
+    });
+    
     // Minimal, reliable auto-scroll with simple fallbacks
     const scrollToBottom = () => {
         const c = document.getElementById('messages-container');

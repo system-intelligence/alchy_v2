@@ -119,7 +119,7 @@
     </div>
 
     <!-- Pagination -->
-    <div class="mt-6">
+    <div class="mt-6 mb-8">
         {{ $tools->links() }}
     </div>
 
@@ -191,7 +191,7 @@
                     </div>
 
                     <div>
-                        <label class="mb-2 block text-sm font-medium text-gray-300">Model</label>
+                        <label class="mb-2 block text-sm font-medium text-gray-300">Model *</label>
                         <input 
                             type="text" 
                             wire:model="model" 
@@ -255,7 +255,7 @@
 
                     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
-                            <label class="mb-2 block text-sm font-medium text-gray-300">Released To</label>
+                            <label class="mb-2 block text-sm font-medium text-gray-300">Released To *</label>
                             <input 
                                 type="text" 
                                 wire:model="released_to" 
@@ -266,7 +266,7 @@
                         </div>
 
                         <div>
-                            <label class="mb-2 block text-sm font-medium text-gray-300">Release Date</label>
+                            <label class="mb-2 block text-sm font-medium text-gray-300">Release Date *</label>
                             <input 
                                 type="date" 
                                 wire:model="release_date" 
@@ -310,6 +310,13 @@
                     <h3 class="text-lg font-semibold text-white">Delete Tool</h3>
                 </div>
                 <p class="mb-6 text-sm text-gray-400">Are you sure you want to delete this tool? This action cannot be undone.</p>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-300 mb-1">Enter your password to confirm</label>
+                    <input type="password" wire:model="deletePassword" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/40" />
+                    @error('deletePassword') <span class="text-xs text-red-400">{{ $message }}</span> @enderror
+                </div>
+                
                 <div class="flex items-center justify-end gap-3">
                     <button 
                         wire:click="closeDeleteModal" 

@@ -1,33 +1,33 @@
- @php
+         @php
     use App\Enums\InventoryStatus;
 @endphp
 
 <div>
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-4 mb-3 md:mb-6">
         <div class="flex items-center gap-2">
-            <h1 class="text-2xl font-bold">Masterlist</h1>
+            <h1 class="text-lg md:text-xl font-bold">Masterlist</h1>
         </div>
         <div class="flex-1 md:max-w-2xl">
-            <div class="flex flex-col sm:flex-row gap-3">
+            <div class="flex flex-col sm:flex-row gap-2">
                 <div class="flex flex-1 gap-2">     
                     <input
                         type="text"
                         wire:model.debounce.400ms="search"
                         wire:keydown.enter="performSearch"
-                        placeholder="Search brand, description, location..."
-                        class="flex-1 shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                        placeholder="Search..."
+                        class="flex-1 shadow appearance-none border rounded py-1.5 md:py-2 px-2 md:px-3 text-xs md:text-sm text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                     />
                     <button
                         wire:click="performSearch"
-                        class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded flex items-center gap-2 shadow-md border-2 border-blue-500 whitespace-nowrap"
+                        class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1.5 md:py-2 px-3 md:px-4 rounded flex items-center gap-1 md:gap-2 shadow-md border-2 border-blue-500 whitespace-nowrap text-xs md:text-sm"
                     >
-                        <x-heroicon-o-magnifying-glass class="w-4 h-4" />
+                        <x-heroicon-o-magnifying-glass class="w-3 h-3 md:w-4 md:h-4" />
                         <span class="hidden sm:inline">Search</span>
                     </button>
                 </div>
                 <select
                     wire:change="filterByStatus($event.target.value)"
-                    class="shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    class="shadow appearance-none border rounded py-1.5 md:py-2 px-2 md:px-3 text-xs md:text-sm text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                 >
                     <option value="">All Status</option>
                     <option value="normal">Normal</option>
@@ -36,7 +36,7 @@
                 </select>
                 <select
                     wire:change="filterByCategory($event.target.value)"
-                    class="shadow appearance-none border rounded py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    class="shadow appearance-none border rounded py-1.5 md:py-2 px-2 md:px-3 text-xs md:text-sm text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                 >
                     <option value="">All Locations</option>
                     @foreach(\App\Models\Inventory::CATEGORIES as $categoryOption)
@@ -46,30 +46,30 @@
             </div>
         </div>
         @if(auth()->user()->isSystemAdmin() || auth()->user()->isUser())
-        <div class="flex gap-2">
+        <div class="flex gap-1 md:gap-2">
             @if(count($selectedItems) > 0)
             <button wire:click="addSelectedToRelease"
-                    class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 shadow-md border-2 border-green-500">
-                <x-heroicon-o-plus class="w-4 h-4" />
-                Record Release ({{ count($selectedItems) }} items)
+                    class="bg-green-500 hover:bg-green-600 text-white font-semibold py-1.5 md:py-2 px-2 md:px-3 rounded-lg flex items-center gap-1 md:gap-2 shadow-md border-2 border-green-500 text-xs">
+                <x-heroicon-o-plus class="w-3 h-3 md:w-4 md:h-4" />
+                <span class="hidden md:inline">Release ({{ count($selectedItems) }})</span>
+                <span class="md:hidden">({{ count($selectedItems) }})</span>
             </button>
             @if(auth()->user()->isSystemAdmin())
             <button wire:click="bulkDelete"
-                    class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded flex items-center gap-2">
-                <x-heroicon-o-trash class="w-4 h-4" />
-                Delete Selected ({{ count($selectedItems) }})
+                    class="bg-red-500 hover:bg-red-700 text-white font-bold py-1.5 md:py-2 px-2 md:px-3 rounded flex items-center gap-1 md:gap-2 text-xs">
+                <x-heroicon-o-trash class="w-3 h-3 md:w-4 md:h-4" />
             </button>
             @endif
             @else
-            <button class="bg-gray-400 cursor-not-allowed opacity-60 text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 shadow-md border-2 border-gray-400" disabled title="Select materials from the list first">
-                <x-heroicon-o-plus class="w-4 h-4" />
-                Select Materials to Release
+            <button class="bg-gray-400 cursor-not-allowed opacity-60 text-white font-semibold py-1.5 md:py-2 px-2 md:px-3 rounded-lg flex items-center gap-1 md:gap-2 shadow-md border-2 border-gray-400 text-xs" disabled title="Select materials first">
+                <x-heroicon-o-plus class="w-3 h-3 md:w-4 md:h-4" />
+                <span class="hidden md:inline">Select</span>
             </button>
             @endif
             @if(auth()->user()->isSystemAdmin())
-            <button wire:click="openModal" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded flex items-center gap-2">
-                <x-heroicon-o-plus class="w-4 h-4" />
-                Add Inventory
+            <button wire:click="openModal" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1.5 md:py-2 px-2 md:px-3 rounded flex items-center gap-1 md:gap-2 text-xs">
+                <x-heroicon-o-plus class="w-3 h-3 md:w-4 md:h-4" />
+                <span class="hidden md:inline">Add</span>
             </button>
             @endif
         </div>
@@ -77,6 +77,41 @@
 </div>
 
 <script>
+/* Custom red scrollbar for responsive table */
+.custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #ef4444 #f3f4f6; /* Red thumb on light gray track */
+}
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+.custom-scrollbar::-webkit-scrollbar {
+    height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: #f3f4f6;
+    border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #ef4444;
+    border-radius: 4px;
+    border: 2px solid #f3f4f6;
+}
+
+/* Dark mode scrollbar */
+.dark .custom-scrollbar {
+    scrollbar-color: #ef4444 #374151;
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-track {
+    background: #374151;
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+    border-color: #374151;
+}
+
 function formatNumberInput(input) {
     // Remove all non-digit and non-comma characters first
     let value = input.value.replace(/[^\d,]/g, '');
@@ -124,22 +159,26 @@ function formatDecimalInput(input) {
 
     <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
         <div class="p-6">
-            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <!-- Responsive table container with custom red scrollbar -->
+            <div class="-mx-6 -mb-6">
+                <div class="overflow-x-auto overscroll-x-contain px-6 pb-6 custom-scrollbar">
+                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead class="bg-gray-50 dark:bg-gray-700">
                     <tr>
                         @if(auth()->user()->isSystemAdmin() || auth()->user()->isUser())
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        <th class="px-2 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                             <input type="checkbox" wire:model.live="selectAll" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
                         </th>
                         @endif
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">No.</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Brand</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Description</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Location</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Quantity</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
+                        <th class="px-2 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">No.</th>
+                        <th class="px-2 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Brand</th>
+                        <th class="px-2 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Description</th>
+                        <th class="px-2 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Location</th>
+                        <th class="px-2 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Qty</th>
+                        <th class="px-2 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Unit</th>
+                        <th class="px-2 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
                         @if(auth()->user()->isSystemAdmin())
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                        <th class="px-2 md:px-4 py-2 md:py-3 text-left text-[10px] md:text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Act</th>
                         @endif
                     </tr>
                 </thead>
@@ -151,19 +190,20 @@ function formatDecimalInput(input) {
                         <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors {{ $isSelected ? 'bg-orange-100 dark:bg-orange-900/40' : '' }}"
                             wire:click="toggleItemSelection({{ $inventory->id }})">
                             @if(auth()->user()->isSystemAdmin() || auth()->user()->isUser())
-                            <td class="px-6 py-4 whitespace-nowrap" wire:click.stop>
+                            <td class="px-2 md:px-4 py-1 md:py-3 whitespace-nowrap" wire:click.stop>
                                 <input type="checkbox"
                                        wire:model.live="selectedItems"
                                        value="{{ $inventory->id }}"
                                        class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
                             </td>
                             @endif
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{{ $index + 1 }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ $inventory->brand }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ $inventory->description }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ $inventory->category }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{{ number_format($inventory->quantity, 0, '.', ',') }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap">
+                            <td class="px-2 md:px-4 py-1 md:py-3 whitespace-nowrap text-[11px] md:text-sm font-medium text-gray-900 dark:text-white">{{ $index + 1 }}</td>
+                            <td class="px-2 md:px-4 py-1 md:py-3 whitespace-nowrap text-[11px] md:text-sm text-gray-500 dark:text-gray-300">{{ $inventory->brand }}</td>
+                            <td class="px-2 md:px-4 py-1 md:py-3 whitespace-nowrap text-[11px] md:text-sm text-gray-500 dark:text-gray-300">{{ $inventory->description }}</td>
+                            <td class="px-2 md:px-4 py-1 md:py-3 whitespace-nowrap text-[11px] md:text-sm text-gray-500 dark:text-gray-300">{{ $inventory->category }}</td>
+                            <td class="px-2 md:px-4 py-1 md:py-3 whitespace-nowrap text-[11px] md:text-sm text-gray-500 dark:text-gray-300">{{ number_format($inventory->quantity, 2, '.', ',') }}</td>
+                            <td class="px-2 md:px-4 py-1 md:py-3 whitespace-nowrap text-[11px] md:text-sm text-gray-500 dark:text-gray-300">{{ $inventory->unit ?? 'Pcs' }}</td>
+                            <td class="px-2 md:px-4 py-1 md:py-3 whitespace-nowrap">
                                 @php
                                     $statusEnum = $inventory->status instanceof InventoryStatus
                                         ? $inventory->status
@@ -180,7 +220,7 @@ function formatDecimalInput(input) {
                                 </span>
                             </td>
                             @if(auth()->user()->isSystemAdmin())
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <td class="px-2 md:px-4 py-1 md:py-3 whitespace-nowrap text-[11px] md:text-sm font-medium">
                                 <div class="flex items-center space-x-2">
                                     <button wire:click="openModal({{ $inventory->id }})"
                                             class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 p-1 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
@@ -205,6 +245,8 @@ function formatDecimalInput(input) {
                     @endforelse
                 </tbody>
             </table>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -267,6 +309,7 @@ function formatDecimalInput(input) {
                                         <tr>
                                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Material</th>
                                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Quantity</th>
+                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Unit</th>
                                             @if(auth()->user()->isSystemAdmin())
                                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Cost per Unit</th>
                                             <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Total</th>
@@ -285,7 +328,10 @@ function formatDecimalInput(input) {
                                                 @endif
                                             </td>
                                             <td class="px-4 py-2">
-                                                <input type="text" inputmode="numeric" pattern="[0-9,]*" wire:model="releaseItems.{{ $index }}.quantity_used" class="w-24 shadow appearance-none border rounded py-1 px-2 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none" onblur="formatNumberInput(this)" />
+                                                <input type="text" inputmode="decimal" pattern="[0-9.]*" wire:model="releaseItems.{{ $index }}.quantity_used" class="w-24 shadow appearance-none border rounded py-1 px-2 text-gray-700 dark:text-gray-300 dark:bg-gray-700 focus:outline-none" onblur="formatDecimalInput(this)" />
+                                            </td>
+                                            <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">
+                                                {{ $item['inventory']->unit ?? 'Pcs' }}
                                             </td>
                                             @if(auth()->user()->isSystemAdmin())
                                             <td class="px-4 py-2">
@@ -442,12 +488,12 @@ function formatDecimalInput(input) {
                         <form wire:submit.prevent="save" class="space-y-6">
                         <div class="mb-4">
                             <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="brand">Brand</label>
-                            <input wire:model="brand" type="text" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="brand">
+                            <input wire:model="brand" type="text" placeholder="Enter brand name" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="brand">
                             @error('brand') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                         </div>
                         <div class="mb-4">
                             <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="description">Description</label>
-                            <textarea wire:model="description" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="description"></textarea>
+                            <textarea wire:model="description" placeholder="Enter item description" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="description"></textarea>
                             @error('description') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                         </div>
                         <div class="mb-4">
@@ -463,23 +509,37 @@ function formatDecimalInput(input) {
                         <div class="mb-4">
                             <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="quantity">Quantity</label>
                             @if($editing)
-                                <input wire:model="quantity" type="text" inputmode="numeric" pattern="[0-9,]*" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline bg-gray-100 dark:bg-gray-600 cursor-not-allowed" id="quantity" oninput="formatNumberInput(this)" disabled readonly title="Quantity changes should be made through the Inbound Inventory tab">
+                                <div class="flex gap-2 items-center">
+                                    <input wire:model="quantity" type="text" inputmode="numeric" pattern="[0-9,]*" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline bg-gray-100 dark:bg-gray-600 cursor-not-allowed" id="quantity" oninput="formatNumberInput(this)" disabled readonly title="Quantity changes should be made through the Inbound Inventory tab">
+                                    <span class="inline-flex items-center px-3 py-2 rounded-md bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium">
+                                        {{ $unit }}
+                                    </span>
+                                </div>
                                 <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">⚠️ Quantity can only be adjusted through the Inbound Inventory tab</p>
                             @else
-                                <input wire:model="quantity" type="text" inputmode="numeric" pattern="[0-9,]*" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="quantity" oninput="formatNumberInput(this)">
+                                <input wire:model="quantity" type="text" inputmode="numeric" pattern="[0-9,]*" placeholder="0" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="quantity" oninput="formatNumberInput(this)">
                                 <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Enter the initial physical count for this inventory item.</p>
                             @endif
                             @error('quantity') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                         </div>
                         <div class="mb-4">
+                            <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="unit">Unit</label>
+                            <select wire:model="unit" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="unit">
+                                @foreach(App\Models\Inventory::UNITS as $u)
+                                    <option value="{{ $u }}">{{ $u }}</option>
+                                @endforeach
+                            </select>
+                            @error('unit') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
+                        </div>
+                        <div class="mb-4">
                             <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="min_stock_level">Minimum Stock Level</label>
-                            <input wire:model="min_stock_level" type="text" inputmode="numeric" pattern="[0-9,]*" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="min_stock_level" oninput="formatNumberInput(this)">
+                            <input wire:model="min_stock_level" type="text" inputmode="numeric" pattern="[0-9,]*" placeholder="0" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="min_stock_level" oninput="formatNumberInput(this)">
                             @error('min_stock_level') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                         </div>
                         @if($editing)
                         <div class="mb-4">
                             <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="editPassword">Enter your password to confirm</label>
-                            <input wire:model="editPassword" type="password" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="editPassword">
+                            <input wire:model="editPassword" type="password" placeholder="Enter your password" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="editPassword">
                             @error('editPassword') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                         </div>
                         @endif
@@ -496,12 +556,15 @@ function formatDecimalInput(input) {
                        <form wire:submit.prevent="addInboundStock" class="space-y-6">
                            <div class="mb-4">
                                <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="inboundQuantity">Quantity to Add</label>
-                               <input wire:model="inboundQuantity" type="text" inputmode="numeric" pattern="[0-9,]*" placeholder="Enter quantity..." class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="inboundQuantity" oninput="formatNumberInput(this)">
+                               <div class="flex gap-2">
+                                   <input wire:model="inboundQuantity" type="text" inputmode="numeric" pattern="[0-9,]*" placeholder="Enter quantity..." class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="inboundQuantity" oninput="formatNumberInput(this)">
+                                   <span class="inline-flex items-center px-3 py-2 rounded-md bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium whitespace-nowrap">{{ $unit }}</span>
+                               </div>
                                @error('inboundQuantity') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                            </div>
                            <div class="mb-4">
                                <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="supplier">Supplier</label>
-                               <input wire:model="supplier" type="text" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="supplier">
+                               <input wire:model="supplier" type="text" placeholder="Enter supplier name" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="supplier">
                                @error('supplier') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                            </div>
                            <div class="mb-4">
@@ -511,7 +574,7 @@ function formatDecimalInput(input) {
                            </div>
                            <div class="mb-4">
                                <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2" for="inboundNotes">Notes</label>
-                               <textarea wire:model="inboundNotes" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="inboundNotes" rows="3"></textarea>
+                               <textarea wire:model="inboundNotes" placeholder="Enter notes (optional)" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="inboundNotes" rows="3"></textarea>
                                @error('inboundNotes') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
                            </div>
                            <div class="flex items-center justify-end pt-6 border-t border-gray-200 dark:border-gray-700">
@@ -553,7 +616,7 @@ function formatDecimalInput(input) {
                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">After</th>
                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Cost/Unit</th>
                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Total Cost</th>
-                                           <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">User</th>
+                                           <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Request by</th>
                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Notes</th>
                                        </tr>
                                    </thead>
@@ -564,11 +627,11 @@ function formatDecimalInput(input) {
                                            <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">{{ $movement->movement_type_display }}</td>
                                            <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">
                                                <span class="{{ $movement->quantity_change > 0 ? 'text-green-600' : 'text-red-600' }}">
-                                                   {{ number_format($movement->quantity_change) }}
+                                                   {{ number_format($movement->quantity_change, 2) }}
                                                </span>
                                            </td>
-                                           <td class="px-4 py-2 text-sm text-red-600 dark:text-red-400">{{ number_format($movement->previous_quantity) }}</td>
-                                           <td class="px-4 py-2 text-sm text-green-600 dark:text-green-400">{{ number_format($movement->new_quantity) }}</td>
+                                           <td class="px-4 py-2 text-sm text-red-600 dark:text-red-400">{{ number_format($movement->previous_quantity, 2) }}</td>
+                                           <td class="px-4 py-2 text-sm text-green-600 dark:text-green-400">{{ number_format($movement->new_quantity, 2) }}</td>
                                            <td class="px-4 py-2 text-sm text-blue-600 dark:text-blue-400">
                                                @if($movement->cost_per_unit)
                                                    ₱{{ number_format($movement->cost_per_unit, 2) }}
@@ -583,7 +646,7 @@ function formatDecimalInput(input) {
                                                    -
                                                @endif
                                            </td>
-                                           <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">{{ $movement->user ? $movement->user->name : 'Unknown' }}</td>
+                                           <td class="px-4 py-2 text-sm {{ $movement->user && $movement->user->role === 'system_admin' ? 'text-orange-600 dark:text-orange-400' : 'text-gray-500 dark:text-gray-300' }}">{{ $movement->user ? $movement->user->name : 'Unknown' }}</td>
                                            <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">{{ $movement->notes ?: '-' }}</td>
                                        </tr>
                                        @empty
@@ -605,3 +668,4 @@ function formatDecimalInput(input) {
        </div>
    @endif
 </div>
+

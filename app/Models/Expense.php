@@ -48,6 +48,7 @@ class Expense extends Model
     {
         return [
             'released_at' => 'datetime',
+            'quantity_used' => 'decimal:2',
             'cost_per_unit' => 'decimal:2',
             'total_cost' => 'decimal:2',
         ];

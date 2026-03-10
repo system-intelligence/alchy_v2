@@ -478,6 +478,20 @@ function formatDecimalInput(input) {
                         </div>
                     @endforeach
                 </div>
+            @else
+                <div class="flex flex-col items-center justify-center py-16 text-center">
+                    <div class="mb-4 rounded-full bg-[#172033] p-4">
+                        <x-heroicon-o-folder-open class="h-12 w-12 text-gray-500" />
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-300 mb-2">No Projects Yet</h3>
+                    <p class="text-sm text-gray-500 mb-6 max-w-md">
+                        Start by adding a client first, then create projects to track expenses and releases.
+                    </p>
+                    <button wire:click="openClientModal" class="inline-flex items-center gap-2 rounded-xl bg-primary-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-primary-500/20 transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-600">
+                        <x-heroicon-o-plus class="h-4 w-4" />
+                        Add Your First Client
+                    </button>
+                </div>
             @endif
         @endif
 
@@ -499,6 +513,8 @@ function formatDecimalInput(input) {
                 @forelse($receiptGroups as $receipt)
                     @php
                         $client = $receipt['client'];
+                        // Skip if client is null (shouldn't happen due to backend filter, but safety check)
+                        if (!$client) continue;
                         $projects = $receipt['projects'];
                         $latestExpense = $projects
                             ->flatMap(fn ($project) => $project['expenses'])
@@ -658,6 +674,59 @@ function formatDecimalInput(input) {
                         No expenses match your current filters. Adjust the filters above to see receipt details.
                     </div>
                 @endforelse
+
+                <!-- Receipts Pagination -->
+                @if(isset($receiptGroupsTotal) && $receiptGroupsTotal > 0)
+                    @php
+                        $totalPages = ceil($receiptGroupsTotal / $expensesPerPage);
+                        $currentPage = $receiptsPage;
+                        $startPage = max(1, $currentPage - 2);
+                        $endPage = min($totalPages, $currentPage + 2);
+                        // Ensure at least show page 1 even if calculation gives 0
+                        if ($totalPages < 1) $totalPages = 1;
+                    @endphp
+                    <div class="mt-6 flex flex-col items-center justify-between gap-4 rounded-2xl border border-[#1B2537] bg-[#0D1526] p-4 sm:p-6 sm:flex-row">
+                        <div class="text-sm text-gray-400 text-center sm:text-left">
+                            <span class="hidden sm:inline">Showing</span> 
+                            <span class="font-semibold text-primary-100">page {{ $currentPage }}</span> 
+                            <span class="text-gray-500">of {{ $totalPages }}</span>
+                            <span class="ml-1 text-gray-500">({{ $receiptGroupsTotal }} total)</span>
+                        </div>
+                        <div class="flex flex-wrap items-center justify-center gap-2">
+                            @if($currentPage > 1)
+                                <button type="button" wire:click="setReceiptsPage({{ $currentPage - 1 }})" class="flex items-center gap-1 rounded-xl border border-[#1B2537] bg-[#121f33] px-3 py-2 text-sm font-medium text-gray-300 transition-all hover:border-primary-500/40 hover:bg-primary-500/10 hover:text-primary-100">
+                                    <x-heroicon-o-chevron-left class="w-4 h-4" />
+                                    <span class="hidden sm:inline">Prev</span>
+                                </button>
+                            @endif
+                            
+                            @if($startPage > 1)
+                                <button type="button" wire:click="setReceiptsPage(1)" class="rounded-xl border border-[#1B2537] bg-[#121f33] px-3 py-2 text-sm font-medium text-gray-300 transition-all hover:border-primary-500/40 hover:bg-primary-500/10 hover:text-primary-100">1</button>
+                                @if($startPage > 2)<span class="px-1 text-gray-500">...</span>@endif
+                            @endif
+                            
+                            @for($i = $startPage; $i <= $endPage; $i++)
+                                @if($i == $currentPage)
+                                    <span class="rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-primary-500/30">{{ $i }}</span>
+                                @else
+                                    <button type="button" wire:click="setReceiptsPage({{ $i }})" class="rounded-xl border border-[#1B2537] bg-[#121f33] px-3 py-2 text-sm font-medium text-gray-300 transition-all hover:border-primary-500/40 hover:bg-primary-500/10 hover:text-primary-100">{{ $i }}</button>
+                                @endif
+                            @endfor
+                            
+                            @if($endPage < $totalPages)
+                                @if($endPage < $totalPages - 1)<span class="px-1 text-gray-500">...</span>@endif
+                                <button type="button" wire:click="setReceiptsPage({{ $totalPages }})" class="rounded-xl border border-[#1B2537] bg-[#121f33] px-3 py-2 text-sm font-medium text-gray-300 transition-all hover:border-primary-500/40 hover:bg-primary-500/10 hover:text-primary-100">{{ $totalPages }}</button>
+                            @endif
+                            
+                            @if($currentPage < $totalPages)
+                                <button type="button" wire:click="setReceiptsPage({{ $currentPage + 1 }})" class="flex items-center gap-1 rounded-xl border border-[#1B2537] bg-[#121f33] px-3 py-2 text-sm font-medium text-gray-300 transition-all hover:border-primary-500/40 hover:bg-primary-500/10 hover:text-primary-100">
+                                    <span class="hidden sm:inline">Next</span>
+                                    <x-heroicon-o-chevron-right class="w-4 h-4" />
+                                </button>
+                            @endif
+                        </div>
+                    </div>
+                @endif
             </div>
 
         @endif
@@ -865,7 +934,9 @@ function formatDecimalInput(input) {
                     <!-- Expenses List - Full Width Below Calendar -->
                     <div class="space-y-6">
                         @php
-                            $groupedClientExpenses = collect($clientExpenses)
+                            // $clientExpenses is now always an array
+                            $expensesCollection = collect($clientExpenses);
+                            $groupedClientExpenses = $expensesCollection
                                 ->groupBy(fn ($expense) => $expense->project_id ?: 'unassigned')
                                 ->sortByDesc(fn ($group) => $group->sum('total_cost'));
                         @endphp
@@ -993,6 +1064,56 @@ function formatDecimalInput(input) {
                                 No expenses recorded for this client yet.
                             </div>
                         @endforelse
+
+                        <!-- Pagination Controls -->
+                        @if($clientExpensesHasPages && $clientExpensesTotal > 0)
+                            <div class="mt-6 flex flex-col items-center justify-between gap-4 border-t border-[#1B2537] pt-6 sm:flex-row">
+                                <div class="text-sm text-gray-400">
+                                    Showing {{ $clientExpensesFirstItem ?? 0 }} to {{ $clientExpensesLastItem ?? 0 }} of {{ number_format($clientExpensesTotal) }} results
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    @if($clientExpensesPage > 1)
+                                        <button type="button" wire:click="setClientExpensesPage({{ $clientExpensesPage - 1 }})" class="rounded-lg border border-[#1B2537] bg-[#121f33] px-3 py-2 text-sm text-gray-300 transition-colors hover:border-primary-500/40 hover:text-primary-100">
+                                            Previous
+                                        </button>
+                                    @endif
+                                    
+                                    <!-- Page Numbers -->
+                                    <div class="flex items-center gap-1">
+                                        @php
+                                            $currentPage = $clientExpensesPage;
+                                            $lastPage = $clientExpensesLastPage;
+                                            $startPage = max(1, $currentPage - 2);
+                                            $endPage = min($lastPage, $currentPage + 2);
+                                        @endphp
+                                        
+                                        @if($startPage > 1)
+                                            <button type="button" wire:click="setClientExpensesPage(1)" class="rounded-lg border border-[#1B2537] bg-[#121f33] px-3 py-2 text-sm text-gray-300 hover:border-primary-500/40 hover:text-primary-100">1</button>
+                                            @if($startPage > 2)<span class="px-2 text-gray-500">...</span>@endif
+                                        @endif
+                                        
+                                        @for($i = $startPage; $i <= $endPage; $i++)
+                                            @if($i == $currentPage)
+                                                <span class="rounded-lg bg-primary-500/20 px-3 py-2 text-sm font-semibold text-primary-100">{{ $i }}</span>
+                                            @else
+                                                <button type="button" wire:click="setClientExpensesPage({{ $i }})" class="rounded-lg border border-[#1B2537] bg-[#121f33] px-3 py-2 text-sm text-gray-300 hover:border-primary-500/40 hover:text-primary-100">{{ $i }}</button>
+                                            @endif
+                                        @endfor
+                                        
+                                        @if($endPage < $lastPage)
+                                            @if($endPage < $lastPage - 1)<span class="px-2 text-gray-500">...</span>@endif
+                                            <button type="button" wire:click="setClientExpensesPage({{ $lastPage }})" class="rounded-lg border border-[#1B2537] bg-[#121f33] px-3 py-2 text-sm text-gray-300 hover:border-primary-500/40 hover:text-primary-100">{{ $lastPage }}</button>
+                                        @endif
+                                    </div>
+                                    
+                                    @if($clientExpensesPage < $clientExpensesLastPage)
+                                        <button type="button" wire:click="setClientExpensesPage({{ $clientExpensesPage + 1 }})" class="rounded-lg border border-[#1B2537] bg-[#121f33] px-3 py-2 text-sm text-gray-300 transition-colors hover:border-primary-500/40 hover:text-primary-100">
+                                            Next
+                                        </button>
+                                    @endif
+                                </div>
+                            </div>
+                        @endif
                     </div>
                 </div>
             </div>
@@ -1114,11 +1235,20 @@ function formatDecimalInput(input) {
                                         @foreach($manageRecentReleases as $release)
                                             @php
                                                 $releasedAt = !empty($release['released_at']) ? \Illuminate\Support\Carbon::parse($release['released_at'])->setTimezone('Asia/Manila') : null;
+                                                $isPending = ($release['status'] ?? 'completed') === 'pending';
+                                                $borderColor = $isPending ? 'border-amber-500/40' : 'border-[#1f2b40]';
+                                                $bgGradient = $isPending ? 'from-[#2a2520] via-[#1a1815] to-[#14120f]' : 'from-[#1a2539] via-[#0f1829] to-[#08111f]';
+                                                $iconColor = $isPending ? 'border-amber-500/40 bg-amber-500/15 text-amber-200' : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200';
+                                                $badgeColor = $isPending ? 'border-amber-500/40 bg-amber-500/10 text-amber-200' : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
                                             @endphp
-                                            <div class="relative flex flex-col sm:flex-row gap-3 sm:gap-4 rounded-xl sm:rounded-2xl border border-[#1f2b40] bg-gradient-to-br from-[#1a2539] via-[#0f1829] to-[#08111f] p-4 sm:p-5 shadow-lg shadow-black/25">
+                                            <div class="relative flex flex-col sm:flex-row gap-3 sm:gap-4 rounded-xl sm:rounded-2xl border {{ $borderColor }} bg-gradient-to-br {{ $bgGradient }} p-4 sm:p-5 shadow-lg shadow-black/25">
                                                 <div class="flex sm:flex-col items-center sm:items-center justify-between sm:justify-start gap-2 sm:gap-0">
-                                                    <span class="flex h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0 items-center justify-center rounded-lg sm:rounded-xl border border-emerald-500/40 bg-emerald-500/15 text-emerald-200">
-                                                        <x-heroicon-o-truck class="h-4 w-4 sm:h-5 sm:w-5" />
+                                                    <span class="flex h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0 items-center justify-center rounded-lg sm:rounded-xl border {{ $iconColor }}">
+                                                        @if($isPending)
+                                                            <x-heroicon-o-clock class="h-4 w-4 sm:h-5 sm:w-5" />
+                                                        @else
+                                                            <x-heroicon-o-truck class="h-4 w-4 sm:h-5 sm:w-5" />
+                                                        @endif
                                                     </span>
                                                     <span class="text-[10px] sm:text-[11px] uppercase tracking-wide text-gray-500 sm:mt-2">{{ $releasedAt ? $releasedAt->diffForHumans() : '—' }}</span>
                                                 </div>
@@ -1128,7 +1258,13 @@ function formatDecimalInput(input) {
                                                             <p class="text-xs sm:text-sm font-semibold text-white truncate">{{ $release['inventory']['brand'] ?? 'Unknown Item' }}</p>
                                                             <p class="text-[10px] sm:text-[11px] text-gray-400 truncate">{{ $release['inventory']['description'] ?? '—' }}</p>
                                                         </div>
-                                                        @if($editingReleaseId == $release['id'])
+                                                        @if($isPending)
+                                                            <!-- Pending status - show pending badge -->
+                                                            <span class="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold text-amber-200 whitespace-nowrap">
+                                                                <x-heroicon-o-clock class="h-3.5 w-3.5 flex-shrink-0" />
+                                                                Pending Approval
+                                                            </span>
+                                                        @elseif($editingReleaseId == $release['id'])
                                                             <div class="flex items-center gap-2">
                                                                 <div class="relative flex items-center">
                                                                     <span class="pointer-events-none absolute left-2 text-[10px] text-gray-500">₱</span>
@@ -1156,10 +1292,17 @@ function formatDecimalInput(input) {
                                                             <x-heroicon-o-cube class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-500 flex-shrink-0" />
                                                             <span class="truncate">{{ number_format($release['quantity'], 0, '.', ',') }} unit(s)</span>
                                                         </div>
-                                                        <div class="flex items-center gap-1.5 sm:gap-2">
-                                                            <x-heroicon-o-currency-dollar class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-500 flex-shrink-0" />
-                                                            <span class="truncate">₱{{ number_format($release['cost_per_unit'], 2) }} per unit</span>
-                                                        </div>
+                                                        @if($isPending)
+                                                            <div class="flex items-center gap-1.5 sm:gap-2">
+                                                                <x-heroicon-o-currency-dollar class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-500 flex-shrink-0" />
+                                                                <span class="truncate text-amber-400">Awaiting approval</span>
+                                                            </div>
+                                                        @else
+                                                            <div class="flex items-center gap-1.5 sm:gap-2">
+                                                                <x-heroicon-o-currency-dollar class="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-500 flex-shrink-0" />
+                                                                <span class="truncate">₱{{ number_format($release['cost_per_unit'], 2) }} per unit</span>
+                                                            </div>
+                                                        @endif
                                                     </div>
                                                 </div>
                                             </div>
@@ -1588,8 +1731,9 @@ function formatDecimalInput(input) {
                             <label class="mb-2 block text-sm font-medium text-gray-300">Job Type</label>
                             <select wire:model="projectJobType" required class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40">
                                 <option value="">Select job type...</option>
-                                <option value="installation">Installation</option>
-                                <option value="service">Service</option>
+                                @foreach(App\Models\Project::JOB_TYPES as $jobType)
+                                    <option value="{{ $jobType }}">{{ ucfirst($jobType) }}</option>
+                                @endforeach
                             </select>
                             @error('projectJobType') <span class="text-xs text-red-400">{{ $message }}</span> @enderror
                         </div>

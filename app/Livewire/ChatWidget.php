@@ -14,7 +14,7 @@ use App\Events\ApprovalActionTaken;
 use App\Events\HistoryEntryCreated;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
-use Livewire\Component;
+use Livewire\Component; 
 
 class ChatWidget extends Component
 {
@@ -304,6 +304,25 @@ class ChatWidget extends Component
         }
     }
 
+    public function closeChat()
+    {
+        // On mobile: go back to user list, on desktop: close chat
+        if ($this->selectedUser) {
+            $this->selectedUser = null;
+            $this->messages = [];
+        } else {
+            $this->isOpen = false;
+        }
+    }
+
+    public function goBackToChatList()
+    {
+        // Go back to user list on mobile (keep chat open)
+        $this->selectedUser = null;
+        $this->isGroupChat = false;
+        $this->messages = [];
+    }
+
     public function handleIncoming($payload)
     {
         // Payload from Echo broadcastWith()
@@ -464,9 +483,56 @@ class ChatWidget extends Component
             $oldQuantity = $inventory->quantity;
             $newQuantity = $inventory->quantity - $approval->quantity_requested;
             
-            // Determine cost per unit (default to 0 since not stored in approval)
-            $costPerUnit = 0.00;
+            // Determine cost per unit from approval
+            $costPerUnit = $approval->cost_per_unit ?? 0;
             $totalCost = round($approval->quantity_requested * $costPerUnit, 2);
+            
+            // Get client_id and project_id from approval, or try to derive from stored strings
+            $clientId = $approval->client_id;
+            $projectId = $approval->project_id;
+            
+            // Try to derive from approval's stored strings if not set
+            if ((!$clientId || !$projectId) && $approval->project) {
+                // Try to find project by name or reference code
+                $projectName = $approval->project;
+                
+                // Extract reference code if in format "Name (RefCode)"
+                $refCode = null;
+                if (preg_match('/\(([^)]+)\)$/', $projectName, $matches)) {
+                    $refCode = $matches[1];
+                    $nameOnly = trim(preg_replace('/\s*\([^)]+\)\s*$/', '', $projectName));
+                } else {
+                    $nameOnly = $projectName;
+                }
+                
+                // Try to find project by reference code or name
+                $project = \App\Models\Project::where('reference_code', $refCode)
+                    ->orWhere('name', 'like', '%' . $nameOnly . '%')
+                    ->first();
+                
+                if ($project) {
+                    if (!$clientId) {
+                        $clientId = $project->client_id;
+                    }
+                    if (!$projectId) {
+                        $projectId = $project->id;
+                    }
+                    Log::info('Found project from approval strings', [
+                        'project_id' => $project->id,
+                        'client_id' => $project->client_id,
+                        'name' => $project->name
+                    ]);
+                }
+            }
+            
+            // Log warning if still not found
+            if (!$projectId) {
+                Log::warning('Project ID not found for approval, expense will not be linked to project', [
+                    'approval_id' => $approval->id,
+                    'project_string' => $approval->project,
+                    'inventory_id' => $approval->inventory_id
+                ]);
+            }
             
             // Update inventory status if quantity is 0
             $newStatus = $newQuantity <= 0
@@ -487,9 +553,9 @@ class ChatWidget extends Component
 
             // Create expense record for this release
             $expense = Expense::create([
-                'client_id' => null,
+                'client_id' => $clientId,
                 'inventory_id' => $inventory->id,
-                'project_id' => null,
+                'project_id' => $projectId,
                 'quantity_used' => $approval->quantity_requested,
                 'cost_per_unit' => $costPerUnit,
                 'total_cost' => $totalCost,
@@ -545,8 +611,9 @@ class ChatWidget extends Component
                 // Client and Project information
                 'client' => $approval->client ?? 'N/A',
                 'client_name' => $approval->client ?? 'N/A',
-                'project' => $approval->project ?? 'N/A',
-                'project_name' => $approval->project ?? 'N/A',
+                'project' => ($approval->project && is_object($approval->project)) ? $approval->project->name . ($approval->project->reference_code ? ' (' . $approval->project->reference_code . ')' : '') : ($approval->project ?? 'N/A'),
+                'project_name' => ($approval->project && is_object($approval->project)) ? $approval->project->name . ($approval->project->reference_code ? ' (' . $approval->project->reference_code . ')' : '') : ($approval->project ?? 'N/A'),
+                'project_reference_code' => ($approval->project && is_object($approval->project)) ? ($approval->project->reference_code ?? '') : '',
                 
                 // Material/Inventory information
                 'material' => $inventory->material_name,
@@ -637,12 +704,26 @@ class ChatWidget extends Component
 
             // Send approval notification to requester
             Log::info('Sending chat notification to requester...');
+            // Ensure inventory relation is loaded
+            if (!$approval->relationLoaded('inventory')) {
+                $approval->load('inventory');
+            }
+            $inventory = $approval->inventory;
+            // Use brand and description (material_name doesn't exist in inventory table)
+            $itemName = $inventory ? trim($inventory->brand . ' - ' . $inventory->description) : 'Unknown Item';
+            // Remove trailing ' - ' if description is empty
+            $itemName = rtrim($itemName, ' - ');
+            Log::info('Item name for notification', ['itemName' => $itemName, 'brand' => $inventory ? $inventory->brand : 'null', 'description' => $inventory ? $inventory->description : 'null']);
             $notificationChat = Chat::create([
                 'user_id' => auth()->id(),
                 'recipient_id' => $approval->requested_by,
                 'message' => "✅ Your material release request has been APPROVED!\n\n" .
-                              "Material: {$inventory->material_name}\n" .
+                              "Client: {$approval->client}\n" .
+                              "Project: {$approval->project}\n" .
+                              "Item: {$itemName}\n" .
                               "Quantity: {$approval->quantity_requested}\n" .
+                              "Cost per unit: {$approval->cost_per_unit}\n" .
+                              "\nApproval ID: {$approval->id}\n" .
                               "Approved by: " . auth()->user()->name,
             ]);
             Log::info('Chat notification sent', ['chat_id' => $notificationChat->id]);
@@ -727,7 +808,8 @@ class ChatWidget extends Component
                     'action' => 'Auto Declined by System Admin',
                     'changes' => json_encode([
                         'status' => 'declined',
-                        'project' => $approval->project ?? 'N/A',
+                        'project' => ($approval->project && is_object($approval->project)) ? $approval->project->name . ($approval->project->reference_code ? ' (' . $approval->project->reference_code . ')' : '') : ($approval->project ?? 'N/A'),
+                        'project_reference_code' => ($approval->project && is_object($approval->project)) ? ($approval->project->reference_code ?? '') : '',
                         'client' => $approval->client ?? 'N/A',
                         'material' => $approval->inventory->material_name,
                         'quantity' => $approval->quantity_requested,
@@ -747,7 +829,8 @@ class ChatWidget extends Component
                     'model_id' => $approval->id,
                     'changes' => json_encode([
                         'status' => 'declined',
-                        'project' => $approval->project ?? 'N/A',
+                        'project' => ($approval->project && is_object($approval->project)) ? $approval->project->name . ($approval->project->reference_code ? ' (' . $approval->project->reference_code . ')' : '') : ($approval->project ?? 'N/A'),
+                        'project_reference_code' => ($approval->project && is_object($approval->project)) ? ($approval->project->reference_code ?? '') : '',
                         'client' => $approval->client ?? 'N/A',
                         'material' => $approval->inventory->material_name,
                         'quantity' => $approval->quantity_requested,
@@ -782,13 +865,25 @@ class ChatWidget extends Component
 
             // Send decline notification to requester
             Log::info('Sending decline notification to requester...');
+            // Ensure inventory relation is loaded
+            if (!$approval->relationLoaded('inventory')) {
+                $approval->load('inventory');
+            }
+            // Use brand and description (material_name doesn't exist in inventory table)
+            $itemName = $approval->inventory ? trim($approval->inventory->brand . ' - ' . $approval->inventory->description) : 'Unknown Item';
+            $itemName = rtrim($itemName, ' - ');
+            Log::info('Item name for decline notification', ['itemName' => $itemName]);
             $notificationChat = Chat::create([
                 'user_id' => auth()->id(),
                 'recipient_id' => $approval->requested_by,
                 'message' => "❌ Your material release request has been DECLINED.\n\n" .
-                             "Material: {$approval->inventory->material_name}\n" .
+                             "Client: {$approval->client}\n" .
+                             "Project: {$approval->project}\n" .
+                             "Item: {$itemName}\n" .
                              "Quantity: {$approval->quantity_requested}\n" .
+                             "Cost per unit: {$approval->cost_per_unit}\n" .
                              "Reason: {$reason}\n" .
+                             "\nApproval ID: {$approval->id}\n" .
                              "Declined by: " . auth()->user()->name,
             ]);
             Log::info('Decline chat notification sent', ['chat_id' => $notificationChat->id]);

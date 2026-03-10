@@ -20,10 +20,15 @@ class MaterialReleaseApproval extends Model
         'chat_id',
         'client',
         'project',
+        'client_id',
+        'project_id',
+        'cost_per_unit',
     ];
 
     protected $casts = [
         'reviewed_at' => 'datetime',
+        'quantity_requested' => 'decimal:2',
+        'cost_per_unit' => 'decimal:2',
     ];
 
     /**
@@ -64,6 +69,22 @@ class MaterialReleaseApproval extends Model
     public function chat(): BelongsTo
     {
         return $this->belongsTo(Chat::class);
+    }
+
+    /**
+     * Get the client
+     */
+    public function client(): BelongsTo
+    {
+        return $this->belongsTo(Client::class);
+    }
+
+    /**
+     * Get the project
+     */
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
     }
 
     /**
