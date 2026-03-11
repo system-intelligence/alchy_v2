@@ -114,6 +114,11 @@ class History extends Component
                   ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.approved_by'))) LIKE LOWER(?)", [$searchTerm])
                   ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.reason'))) LIKE LOWER(?)", [$searchTerm])
                   ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.review_notes'))) LIKE LOWER(?)", [$searchTerm])
+                  // Project-specific fields
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.job_type'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.warranty_until'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.start_date'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(changes, '$.target_date'))) LIKE LOWER(?)", [$searchTerm])
                   // Search in old_values JSON (case-insensitive)
                   ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.reference_code'))) LIKE LOWER(?)", [$searchTerm])
                   ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.project'))) LIKE LOWER(?)", [$searchTerm])
@@ -132,10 +137,19 @@ class History extends Component
                   ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.branch'))) LIKE LOWER(?)", [$searchTerm])
                   ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.notes'))) LIKE LOWER(?)", [$searchTerm])
                   ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.description'))) LIKE LOWER(?)", [$searchTerm])
+                  // Project-specific fields in old_values
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.job_type'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.warranty_until'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.start_date'))) LIKE LOWER(?)", [$searchTerm])
+                  ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(old_values, '$.target_date'))) LIKE LOWER(?)", [$searchTerm])
                   // Search by date
                   ->orWhereRaw("DATE_FORMAT(created_at, '%M %d, %Y') LIKE ?", [$searchTerm])
                   ->orWhereRaw("DATE_FORMAT(created_at, '%M %d, %Y - %h:%i %p') LIKE ?", [$searchTerm])
                   ->orWhereRaw("DATE(created_at) LIKE ?", [$searchTerm])
+                  // Search by formatted ID (e.g., 01202026-103028)
+                  ->orWhereRaw("DATE_FORMAT(created_at, '%m%d%Y-%H%i%s') LIKE ?", [$searchTerm])
+                  ->orWhereRaw("DATE_FORMAT(created_at, '%m%d%Y-%H%i') LIKE ?", [$searchTerm])
+                  ->orWhereRaw("DATE_FORMAT(created_at, '%m%d%Y') LIKE ?", [$searchTerm])
                   // Search by user name (case-insensitive via collation)
                   ->orWhereHas('user', function ($userQuery) use ($searchTerm) {
                       $userQuery->where('name', 'like', $searchTerm);
@@ -145,7 +159,9 @@ class History extends Component
                       $projectQuery->where('model', 'project')
                           ->whereHas('projectRelation', function ($p) use ($searchTerm) {
                               $p->where('name', 'like', $searchTerm)
-                                ->orWhere('reference_code', 'like', $searchTerm);
+                                ->orWhere('reference_code', 'like', $searchTerm)
+                                ->orWhere('job_type', 'like', $searchTerm)
+                                ->orWhere('status', 'like', $searchTerm);
                           });
                   })
                   // Search in related expense project data
@@ -233,10 +249,11 @@ class History extends Component
     public function getSummaryProperty()
     {
         $user = auth()->user();
-        $startOfMonth = now()->startOfMonth();
-        $endOfMonth = now()->endOfMonth();
-
-        // Get history entries based on user role
+        
+        // Get expense data
+        $expensesQuery = \App\Models\Expense::query();
+        
+        // Get history count data based on user role
         $historiesQuery = HistoryModel::query();
 
         if ($user->role === 'system_admin') {
@@ -244,29 +261,47 @@ class History extends Component
             $historiesQuery->whereNotIn('user_id', function ($subQuery) use ($user) {
                 $subQuery->select('id')->from('users')->where('role', 'developer');
             });
+            // Admins see all expenses
         } elseif ($user->role === 'user') {
             // Users see their own histories + all approval request histories
             $historiesQuery->where(function ($query) use ($user) {
                 $query->where('user_id', $user->id)
                       ->orWhere('model', 'MaterialReleaseApproval');
             });
+            // Users see only their expenses
+            $expensesQuery->where('user_id', $user->id);
         } else {
             // Developers only see their own histories
             $historiesQuery->where('user_id', $user->id);
+            // Developers see only their own expenses
+            $expensesQuery->where('user_id', $user->id);
         }
 
+        // Calculate expense statistics
+        $totalSpend = (float) $expensesQuery->sum('total_cost');
+        $expensesCount = $expensesQuery->count();
+        
+        // This month expenses
+        $startOfMonth = now()->startOfMonth();
+        $endOfMonth = now()->endOfMonth();
+        $monthSpend = (float) $expensesQuery->clone()
+            ->whereBetween('created_at', [$startOfMonth, $endOfMonth])
+            ->sum('total_cost');
+        
+        // Average per expense
+        $averagePerExpense = $expensesCount > 0 ? round($totalSpend / $expensesCount, 2) : 0;
+        
+        // Calculate history counts
         $totalCount = $historiesQuery->count();
         $monthCount = (clone $historiesQuery)->whereBetween('created_at', [$startOfMonth, $endOfMonth])->count();
 
-        // Calculate average per day for the current month
-        $daysInMonth = now()->daysInMonth;
-        $averagePerDay = $daysInMonth > 0 ? round($monthCount / $daysInMonth, 1) : 0;
-
         return [
-            'total' => $totalCount,
-            'month' => $monthCount,
-            'average' => $averagePerDay,
-            'count' => $totalCount,
+            'total_spend' => $totalSpend,
+            'month_spend' => $monthSpend,
+            'average_per_expense' => $averagePerExpense,
+            'expenses_logged' => $expensesCount,
+            'total_logs' => $totalCount,
+            'month_logs' => $monthCount,
         ];
     }
 

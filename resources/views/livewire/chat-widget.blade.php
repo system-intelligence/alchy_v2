@@ -1,4 +1,4 @@
-<div class="fixed bottom-4 right-4 z-50"
+    <div class="fixed bottom-4 right-4 z-50"
       wire:poll.5s="checkForUpdates"
       x-data="{
         toasts: [],

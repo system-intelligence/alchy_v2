@@ -260,4 +260,13 @@ class History extends Model
     {
         return $this->belongsTo(\App\Models\MaterialReleaseApproval::class, 'model_id');
     }
+
+    /**
+     * Get formatted reference ID based on created_at timestamp.
+     * Format: mdY-His (e.g., 01202026-103028 for January 20, 2026 10:30:28)
+     */
+    public function getFormattedIdAttribute(): string
+    {
+        return $this->created_at->format('mdY-His');
+    }
 }

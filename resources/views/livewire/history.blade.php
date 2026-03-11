@@ -31,20 +31,20 @@ $pageTitle = $isDeveloper ? 'My Activity History' : ($isSystemAdmin ? 'All Activ
     {{-- Summary Stats --}}
     <div class="mb-10 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div class="rounded-2xl border border-primary-500/40 bg-primary-500/10 p-6">
-            <p class="text-xs font-semibold uppercase tracking-wide text-primary-200">Total Logs</p>
-            <p class="mt-2 text-2xl font-semibold text-white">{{ number_format($summary['total'] ?? 0) }}</p>
+            <p class="text-xs font-semibold uppercase tracking-wide text-primary-200">Total Spend</p>
+            <p class="mt-2 text-2xl font-semibold text-white">₱{{ number_format($summary['total_spend'] ?? 0, 2) }}</p>
         </div>
         <div class="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-6">
             <p class="text-xs font-semibold uppercase tracking-wide text-amber-200">This Month</p>
-            <p class="mt-2 text-2xl font-semibold text-white">{{ number_format($summary['month'] ?? 0) }}</p>
+            <p class="mt-2 text-2xl font-semibold text-white">₱{{ number_format($summary['month_spend'] ?? 0, 2) }}</p>
         </div>  
         <div class="rounded-2xl border border-sky-500/40 bg-sky-500/10 p-6">
-            <p class="text-xs font-semibold uppercase tracking-wide text-sky-200">Avg / Day</p>
-            <p class="mt-2 text-2xl font-semibold text-white">{{ number_format($summary['average'] ?? 0, 1) }}</p>
+            <p class="text-xs font-semibold uppercase tracking-wide text-sky-200">Avg / Expense</p>
+            <p class="mt-2 text-2xl font-semibold text-white">₱{{ number_format($summary['average_per_expense'] ?? 0, 2) }}</p>
         </div>
         <div class="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-6">
-            <p class="text-xs font-semibold uppercase tracking-wide text-emerald-200">Activities Logged</p>
-            <p class="mt-2 text-2xl font-semibold text-white">{{ number_format($summary['count'] ?? 0) }}</p>
+            <p class="text-xs font-semibold uppercase tracking-wide text-emerald-200">Expenses Logged</p>
+            <p class="mt-2 text-2xl font-semibold text-white">{{ number_format($summary['expenses_logged'] ?? 0) }}</p>
         </div>
     </div>
 
@@ -140,7 +140,7 @@ $pageTitle = $isDeveloper ? 'My Activity History' : ($isSystemAdmin ? 'All Activ
                             @if($history->model_id)
                                 <div class="bg-gray-50 dark:bg-gray-900 px-3 py-2 rounded">
                                     <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">ID:</span>
-                                    <span class="text-sm font-medium text-gray-900 dark:text-white">{{ $history->model_id }}</span>
+                                    <span class="text-sm font-medium text-gray-900 dark:text-white">{{ $history->formatted_id }}</span>
                                 </div>
                             @endif
                             @if($history->model === 'MaterialReleaseApproval')
