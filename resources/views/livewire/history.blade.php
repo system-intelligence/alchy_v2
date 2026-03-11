@@ -205,7 +205,7 @@ $pageTitle = $isDeveloper ? 'My Activity History' : ($isSystemAdmin ? 'All Activ
                                         <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">Materials:</span>
                                         <span class="text-sm font-medium text-gray-900 dark:text-white">{{ $approval->inventory->brand }} - {{ $approval->inventory->description }} ({{ number_format($approval->quantity_requested, 2) }} units @if($isSystemAdmin)₱{{ number_format($historyCost, 2) }}@else***@endif)</span>
                                     </div>
-                                    @if($approval->status === 'approved' && $approval->reviewer)
+                                    @if($approval->reviewer)
                                         <div class="bg-gray-50 dark:bg-gray-900 px-3 py-2 rounded">
                                             <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">Approve by:</span>
                                             <span class="text-sm font-medium text-green-600">{{ $approval->reviewer->name }}</span>
@@ -319,51 +319,6 @@ $pageTitle = $isDeveloper ? 'My Activity History' : ($isSystemAdmin ? 'All Activ
                                         $createChanges = $history->changes;
                                     }
                                 @endphp
-                                @if($approval && $approval->expense)
-                                    <div class="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded">
-                                        <div class="text-xs text-blue-700 dark:text-blue-300 mb-2 font-semibold">Material Release Request from Masterlist</div>
-                                        <div class="text-sm text-blue-900 dark:text-blue-100 space-y-1">
-                                            <div><strong>Client:</strong> {{ $approval->expense->client->name ?? $createChanges['client'] ?? 'N/A' }}</div>
-                                            @if($approval->expense->project || (!empty($createChanges['project']) && $createChanges['project'] !== 'N/A'))
-                                                @php
-                                                    $projectObj = $approval->expense->project;
-                                                    $projectName = is_object($projectObj) ? $projectObj->name : ($createChanges['project'] ?? 'N/A');
-                                                    // If using fallback, project already includes ref code
-                                                    $projectRef = is_object($projectObj) ? ($projectObj->reference_code ?? '') : '';
-                                                @endphp
-                                                <div><strong>Project:</strong> {{ $projectName }}{{ $projectRef ? ' (' . $projectRef . ')' : '' }}</div>
-                                            @endif
-                                            <div><strong>Item:</strong> {{ $approval->inventory->brand }} - {{ $approval->inventory->description }}</div>
-                                            <div><strong>Quantity:</strong> {{ number_format($approval->quantity_requested) }}</div>
-                                            @php
-                                                $historyCost = null;
-                                                if (is_string($selectedHistory->changes)) {
-                                                    $historyChanges = json_decode($selectedHistory->changes, true) ?? [];
-                                                } elseif (is_array($selectedHistory->changes)) {
-                                                    $historyChanges = $selectedHistory->changes;
-                                                }
-                                                $historyCost = $historyChanges['cost_per_unit'] ?? $approval->expense->cost_per_unit ?? 0;
-                                            @endphp
-                                            @if($isSystemAdmin)
-                                                <div><strong>Cost per unit:</strong> ₱{{ number_format($historyCost, 2) }}</div>
-                                            @endif
-                                        </div>
-                                    </div>
-                                @else
-                                    <div class="mb-4 p-3 bg-green-50 dark:bg-green-900/20 rounded">
-                                        <div class="text-xs text-green-700 dark:text-green-300 mb-1">Details:</div>
-                                        <div class="text-sm text-green-900 dark:text-green-100">
-                                            New {{ $history->model_name }} created
-                                        </div>
-                                    </div>
-                                @endif
-                            @else
-                                <div class="mb-4 p-3 bg-green-50 dark:bg-green-900/20 rounded">
-                                    <div class="text-xs text-green-700 dark:text-green-300 mb-1">Details:</div>
-                                    <div class="text-sm text-green-900 dark:text-green-100">
-                                        New {{ $history->model_name }} created
-                                    </div>
-                                </div>
                             @endif
                         @elseif(($history->action === 'update' || $history->action === 'delete') && ($history->changes || $history->old_values) && $history->action !== 'Stock Movement Recorded')
                             <div class="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded">
@@ -527,10 +482,6 @@ $pageTitle = $isDeveloper ? 'My Activity History' : ($isSystemAdmin ? 'All Activ
                             @if($approval)
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                                     <div>
-                                        <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">Request by:</span>
-                                        <div class="text-sm font-medium text-gray-900 dark:text-white">{{ $approval->requester->name }}</div>
-                                    </div>
-                                    <div>
                                         <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">Materials:</span>
                                         @php
                                             $historyCost = null;
@@ -543,19 +494,41 @@ $pageTitle = $isDeveloper ? 'My Activity History' : ($isSystemAdmin ? 'All Activ
                                         @endphp
                                         <div class="text-sm font-medium text-gray-900 dark:text-white">{{ $approval->inventory->brand }} - {{ $approval->inventory->description }} ({{ number_format($approval->quantity_requested, 2) }} units @if($isSystemAdmin)₱{{ number_format($historyCost, 2) }}@else***@endif)</div>
                                     </div>
-                                    @if($approval->status === 'approved' && $approval->expense && $approval->expense->client)
+                                    @if($approval->expense && $approval->expense->client)
                                         <div>
                                             <span class="text-xs font-semibold text-blue-700 dark:text-blue-300">Client:</span>
                                             <div class="text-sm font-medium text-blue-900 dark:text-blue-100">{{ $approval->expense->client->name }}</div>
                                         </div>
+                                    @else
+                                        @php
+                                            $historyChanges = is_array($selectedHistory->changes) ? $selectedHistory->changes : (is_string($selectedHistory->changes) ? json_decode($selectedHistory->changes, true) ?? [] : []);
+                                            $fallbackClient = $historyChanges['client'] ?? null;
+                                        @endphp
+                                        @if($fallbackClient && $fallbackClient !== 'N/A')
+                                            <div>
+                                                <span class="text-xs font-semibold text-blue-700 dark:text-blue-300">Client:</span>
+                                                <div class="text-sm font-medium text-blue-900 dark:text-blue-100">{{ $fallbackClient }}</div>
+                                            </div>
+                                        @endif
                                     @endif
-                                    @if($approval->status === 'approved' && $approval->expense && $approval->expense->project)
+                                    @if($approval->expense && $approval->expense->project)
                                         <div>
                                             <span class="text-xs font-semibold text-purple-700 dark:text-purple-300">Project:</span>
                                             <div class="text-sm font-medium text-purple-900 dark:text-purple-100">{{ $approval->expense->project->name }} ({{ $approval->expense->project->reference_code }})</div>
                                         </div>
+                                    @else
+                                        @php
+                                            $historyChanges = is_array($selectedHistory->changes) ? $selectedHistory->changes : (is_string($selectedHistory->changes) ? json_decode($selectedHistory->changes, true) ?? [] : []);
+                                            $fallbackProject = $historyChanges['project'] ?? null;
+                                        @endphp
+                                        @if($fallbackProject && $fallbackProject !== 'N/A')
+                                            <div>
+                                                <span class="text-xs font-semibold text-purple-700 dark:text-purple-300">Project:</span>
+                                                <div class="text-sm font-medium text-purple-900 dark:text-purple-100">{{ $fallbackProject }}</div>
+                                            </div>
+                                        @endif
                                     @endif
-                                    @if($approval->status === 'approved' && $approval->reviewer)
+                                    @if($approval->reviewer)
                                         <div>
                                             <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">Approve by:</span>
                                             <div class="text-sm font-medium text-green-600">{{ $approval->reviewer->name }}</div>
@@ -607,8 +580,6 @@ $pageTitle = $isDeveloper ? 'My Activity History' : ($isSystemAdmin ? 'All Activ
                                                                         <th class="px-4 py-3 text-left text-xs font-medium text-blue-700 dark:text-blue-300 uppercase tracking-wider">Request by</th>
                                                                         <th class="px-4 py-3 text-left text-xs font-medium text-blue-700 dark:text-blue-300 uppercase tracking-wider">Date/Time</th>
                                                                         <th class="px-4 py-3 text-left text-xs font-medium text-blue-700 dark:text-blue-300 uppercase tracking-wider">Notes</th>
-                                                                        <th class="px-4 py-3 text-left text-xs font-medium text-blue-700 dark:text-blue-300 uppercase tracking-wider">Supplier</th>
-                                                                        <th class="px-4 py-3 text-left text-xs font-medium text-blue-700 dark:text-blue-300 uppercase tracking-wider">Date Received</th>
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody class="bg-white dark:bg-gray-800 divide-y divide-blue-200 dark:divide-blue-700">
@@ -644,8 +615,6 @@ $pageTitle = $isDeveloper ? 'My Activity History' : ($isSystemAdmin ? 'All Activ
                                                                                     -
                                                                                 @endif
                                                                             </td>
-                                                                            <td class="px-4 py-4 text-sm text-blue-900 dark:text-blue-100">{{ $movement->supplier ?: '-' }}</td>
-                                                                            <td class="px-4 py-4 whitespace-nowrap text-sm text-blue-900 dark:text-blue-100">{{ $movement->date_received ? $movement->date_received->format('M d, Y') : '-' }}</td>
                                                                         </tr>
                                                                     @endforeach
                                                                 </tbody>
@@ -734,8 +703,8 @@ $pageTitle = $isDeveloper ? 'My Activity History' : ($isSystemAdmin ? 'All Activ
                     </div>
 
 
-                    {{-- Header for Material Release Completed and Inbound Stock Added --}}
-                    @if($selectedHistory->action === 'Material Release Completed' || $selectedHistory->action === 'Inbound Stock Added')
+                    {{-- Header for Material Release and all Approval types --}}
+                    @if($selectedHistory->model === 'MaterialReleaseApproval')
                         <div class="border-b border-gray-200 dark:border-gray-700 mb-6">
                             <h3 class="text-xl font-semibold text-gray-900 dark:text-white">{{ $selectedHistory->action === 'Inbound Stock Added' ? 'Inbound Release Details' : 'Release Details' }}</h3>
                         </div>
@@ -761,73 +730,6 @@ $pageTitle = $isDeveloper ? 'My Activity History' : ($isSystemAdmin ? 'All Activ
                                 }
                             @endphp
                         @endif
-                        @if($expense)
-                            <div class="mb-6">
-                                <div class="bg-{{ $selectedHistory->action === 'Inbound Stock Added' ? 'green' : 'blue' }}-50 dark:bg-{{ $selectedHistory->action === 'Inbound Stock Added' ? 'green' : 'blue' }}-900/10 border border-{{ $selectedHistory->action === 'Inbound Stock Added' ? 'green' : 'blue' }}-200 dark:border-{{ $selectedHistory->action === 'Inbound Stock Added' ? 'green' : 'blue' }}-800 rounded-lg p-6">
-                                    <div class="text-sm text-{{ $selectedHistory->action === 'Inbound Stock Added' ? 'green' : 'blue' }}-900 dark:text-{{ $selectedHistory->action === 'Inbound Stock Added' ? 'green' : 'blue' }}-100 space-y-2">
-                                        @php
-                                            $changes = [];
-                                            if (is_string($selectedHistory->changes)) {
-                                                $changes = json_decode($selectedHistory->changes, true) ?? [];
-                                            } elseif (is_array($selectedHistory->changes)) {
-                                                $changes = $selectedHistory->changes;
-                                            }
-
-                                            $clientName = null;
-                                            if ($expense && $expense->client) {
-                                                $clientName = $expense->client->name;
-                                            } elseif (!empty($changes['client']) && $changes['client'] !== 'N/A') {
-                                                $clientName = $changes['client'];
-                                            }
-
-                                            $projectName = null;
-                                            $projectRefCode = null;
-                                            if ($expense && $expense->project) {
-                                                $projectName = $expense->project->name;
-                                                $projectRefCode = $expense->project->reference_code;
-                                            } elseif (!empty($changes['project']) && $changes['project'] !== 'N/A') {
-                                                $projectName = $changes['project'];
-                                                // Project already includes ref code in the string
-                                                $projectRefCode = null;
-                                            }
-
-                                            $userRole = auth()->user()?->role ?? '';
-                                        @endphp
-                                        @if(in_array($userRole, ['user', 'system_admin']) && $clientName)
-                                            <div><strong>Client:</strong> {{ $clientName }}</div>
-                                        @endif
-                                        @if(in_array($userRole, ['user', 'system_admin']) && $projectName)
-                                            <div><strong>Project:</strong> {{ $projectName }} @if($projectRefCode)({{ $projectRefCode }})@endif</div>
-                                        @endif
-                                        <div><strong>Item:</strong> {{ $expense->inventory->brand }} - {{ $expense->inventory->description }}</div>
-                                        <div><strong>Quantity:</strong> {{ $selectedHistory->action === 'Inbound Stock Added' ? number_format($changes['quantity'] ?? 0) : number_format($approval->quantity_requested) }}</div>
-                                        @php
-                                            $historyCost = null;
-                                            if (is_string($selectedHistory->changes)) {
-                                                $historyChanges = json_decode($selectedHistory->changes, true) ?? [];
-                                            } elseif (is_array($selectedHistory->changes)) {
-                                                $historyChanges = $selectedHistory->changes;
-                                            }
-                                            $historyCost = $historyChanges['cost_per_unit'] ?? $expense->cost_per_unit ?? 0;
-                                        @endphp
-                                        @if($isSystemAdmin)
-                                            <div><strong>Cost per unit:</strong> ₱{{ number_format($historyCost, 2) }}</div>
-                                        @endif
-                                        @if($expense->notes)
-                                            <div><strong>Notes:</strong></div>
-                                            <div class="ml-4 mt-1 text-sm">{!! nl2br(str_replace([' - ', ' ('], ['<br>', '<br>('], $expense->notes)) !!}</div>
-                                        @endif
-                                        @if($selectedHistory->action === 'Material Release Completed' && $approval && $approval->reviewer)
-                                            @if($selectedHistory->action === 'Material Release Approved' && $approval->reviewer)
-                                                <div><strong>Approved by:</strong> {{ $approval->reviewer->name }}</div>
-                                            @elseif($selectedHistory->action === 'Approval Request Declined' && $approval->reviewer)
-                                                <div><strong>Declined by:</strong> {{ $approval->reviewer->name }}</div>
-                                            @endif
-                                    </div>
-                                </div>
-                            </div>
-                        @endif
-                    @endif
 
 
 
@@ -1032,13 +934,64 @@ $pageTitle = $isDeveloper ? 'My Activity History' : ($isSystemAdmin ? 'All Activ
                                             <x-heroicon-o-queue-list class="w-5 h-5 inline mr-2" />
                                             Stock Movements Log
                                         </h3>
-                                        @if($approval && $approval->expense && ($approval->expense->project || $approval->expense->client))
-                                            <button wire:click="openRelatedMovementsModal({{ $approval->id }})"
-                                                class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
-                                                <x-heroicon-o-eye class="w-4 h-4 inline mr-1" />
-                                                View Related Logs
+                                        <div class="flex items-center gap-2">
+                                            @php
+                                                // Get data directly from history changes - more reliable
+                                                $historyChanges = [];
+                                                if (is_string($selectedHistory->changes)) {
+                                                    $historyChanges = json_decode($selectedHistory->changes, true) ?? [];
+                                                } elseif (is_array($selectedHistory->changes)) {
+                                                    $historyChanges = $selectedHistory->changes;
+                                                }
+                                                
+                                                $refCode = '';
+                                                $copyValue = '';
+                                                
+                                                // Try to get from approval relationship first
+                                                if ($approval && $approval->expense) {
+                                                    if ($approval->expense->project) {
+                                                        $refCode = $approval->expense->project->reference_code ?? '';
+                                                        $projectName = $approval->expense->project->name ?? '';
+                                                        if (empty($refCode) && !empty($projectName) && preg_match('/\(([^)]+)\)$/', $projectName, $matches)) {
+                                                            $refCode = $matches[1];
+                                                        }
+                                                        $copyValue = $refCode ?: $projectName;
+                                                    } elseif ($approval->expense->client) {
+                                                        $copyValue = $approval->expense->client->name;
+                                                    }
+                                                }
+                                                
+                                                // If still empty, get from history changes
+                                                if (empty($copyValue)) {
+                                                    $projectName = $historyChanges['project_name'] ?? $historyChanges['project'] ?? '';
+                                                    $refCode = $historyChanges['project_reference_code'] ?? '';
+                                                    $clientName = $historyChanges['client_name'] ?? $historyChanges['client'] ?? '';
+                                                    
+                                                    // Extract ref code from project name if in parentheses
+                                                    if (empty($refCode) && !empty($projectName) && strpos($projectName, '(') !== false) {
+                                                        preg_match('/\(([^)]+)\)$/', $projectName, $matches);
+                                                        if (!empty($matches)) {
+                                                            $refCode = $matches[1];
+                                                        }
+                                                    }
+                                                    
+                                                    $copyValue = $refCode ?: $projectName ?: $clientName;
+                                                }
+                                            @endphp
+                                            <button onclick="copyToClipboard('{{ $copyValue }}')"
+                                                class="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-lg transition-colors"
+                                                title="Copy to clipboard">
+                                                <x-heroicon-o-clipboard class="w-4 h-4 inline mr-1" />
+                                                Copy: {{ $copyValue ?: 'Reference' }}
                                             </button>
-                                        @endif
+                                            @if(($approval && $approval->expense && ($approval->expense->project || $approval->expense->client)) || ($isSystemAdmin && $approval && $approval->requested_by == auth()->id()))
+                                                <button wire:click="openRelatedMovementsModal({{ $approval->id }})"
+                                                    class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
+                                                    <x-heroicon-o-eye class="w-4 h-4 inline mr-1" />
+                                                    View Related Logs
+                                                </button>
+                                            @endif
+                                        </div>
                                     </div>
                                     <div class="overflow-x-auto">
                                         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -1055,7 +1008,6 @@ $pageTitle = $isDeveloper ? 'My Activity History' : ($isSystemAdmin ? 'All Activ
                                                     @endif
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Request by</th>
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Notes</th>
-                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Project</th>
                                                 </tr>
                                             </thead>
                                             <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -1067,7 +1019,9 @@ $pageTitle = $isDeveloper ? 'My Activity History' : ($isSystemAdmin ? 'All Activ
                                                             $expenseId = str_replace('expense_', '', $movement->reference);
                                                             $linkedExpense = \App\Models\Expense::with(['project', 'client'])->find($expenseId);
                                                             if ($linkedExpense) {
-                                                                $projectInfo = $linkedExpense->project->name ?? '-';
+                                                                $projectName = $linkedExpense->project->name ?? '-';
+                                                                $projectRef = $linkedExpense->project->reference_code ?? '';
+                                                                $projectInfo = $projectRef ? $projectName . ' (' . $projectRef . ')' : $projectName;
                                                                 $clientInfo = $linkedExpense->client->name ?? '-';
                                                             }
                                                         }
@@ -1107,20 +1061,15 @@ $pageTitle = $isDeveloper ? 'My Activity History' : ($isSystemAdmin ? 'All Activ
                                                         @endif
                                                         <td class="px-4 py-2 text-sm {{ $movement->user && $movement->user->role === 'system_admin' ? 'text-orange-600 dark:text-orange-400' : 'text-gray-500 dark:text-gray-300' }}">{{ $movement->user ? $movement->user->name : 'Unknown' }}</td>
                                                         <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">
-                                                            @if($movement->notes)
-                                                                {!! nl2br(e($movement->notes)) !!}
-                                                            @else
-                                                                -
-                                                            @endif
-                                                        </td>
-                                                        <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">
                                                             @if($clientInfo !== '-' || $projectInfo !== '-')
                                                                 @if($clientInfo !== '-')
-                                                                    <div class="text-xs"><span class="font-semibold">Client:</span> {{ $clientInfo }}</div>
+                                                                    <div><span class="font-semibold">Client:</span> {{ $clientInfo }}</div>
                                                                 @endif
                                                                 @if($projectInfo !== '-')
-                                                                    <div class="text-xs"><span class="font-semibold">Project:</span> {{ $projectInfo }}</div>
+                                                                    <div><span class="font-semibold">Project:</span> {{ $projectInfo }}</div>
                                                                 @endif
+                                                            @elseif($movement->notes)
+                                                                {!! nl2br(e($movement->notes)) !!}
                                                             @else
                                                                 -
                                                             @endif
@@ -1134,11 +1083,52 @@ $pageTitle = $isDeveloper ? 'My Activity History' : ($isSystemAdmin ? 'All Activ
                             @elseif($selectedHistory->action === 'Material Release Completed' || $selectedHistory->action === 'Material Release Request Created' || !empty($changes['material_brand']) || !empty($changes['inventory_id']))
                                 {{-- Fallback: Show from history changes if no stock movement record --}}
                                 <div class="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-6 mt-6">
-                                    <div class="mb-4">
+                                    <div class="flex items-center justify-between mb-4">
                                         <h3 class="text-lg font-semibold text-blue-900 dark:text-blue-100">
                                             <x-heroicon-o-queue-list class="w-5 h-5 inline mr-2" />
                                             Stock Movements Log
                                         </h3>
+                                        <div class="flex items-center gap-2">
+                                            @php
+                                                // Get data directly from history changes - more reliable
+                                                $historyChanges = [];
+                                                if (is_string($selectedHistory->changes)) {
+                                                    $historyChanges = json_decode($selectedHistory->changes, true) ?? [];
+                                                } elseif (is_array($selectedHistory->changes)) {
+                                                    $historyChanges = $selectedHistory->changes;
+                                                }
+                                                
+                                                $copyText = '';
+                                                
+                                                // Get project and client info from changes
+                                                $projectName = $historyChanges['project_name'] ?? $historyChanges['project'] ?? '';
+                                                $projectRef = $historyChanges['project_reference_code'] ?? '';
+                                                $clientName = $historyChanges['client_name'] ?? $historyChanges['client'] ?? '';
+                                                
+                                                // If no reference code but project name has parentheses, extract it
+                                                if (empty($projectRef) && !empty($projectName) && strpos($projectName, '(') !== false) {
+                                                    preg_match('/\(([^)]+)\)$/', $projectName, $matches);
+                                                    if (!empty($matches)) {
+                                                        $projectRef = $matches[1];
+                                                    }
+                                                }
+                                                
+                                                // Priority: reference code > project name > client name
+                                                if (!empty($projectRef)) {
+                                                    $copyText = $projectRef;
+                                                } elseif (!empty($projectName)) {
+                                                    $copyText = $projectName;
+                                                } elseif (!empty($clientName)) {
+                                                    $copyText = $clientName;
+                                                }
+                                            @endphp
+                                            <button onclick="copyToClipboard('{{ $copyText }}')"
+                                                class="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-lg transition-colors"
+                                                title="Copy to clipboard">
+                                                <x-heroicon-o-clipboard class="w-4 h-4 inline mr-1" />
+                                                Copy: {{ $copyText ?: 'Reference' }}
+                                            </button>
+                                        </div>
                                     </div>
                                     <div class="overflow-x-auto">
                                         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -1155,7 +1145,6 @@ $pageTitle = $isDeveloper ? 'My Activity History' : ($isSystemAdmin ? 'All Activ
                                                     @endif
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Request by</th>
                                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Notes</th>
-                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Project</th>
                                                 </tr>
                                             </thead>
                                             <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -1169,6 +1158,10 @@ $pageTitle = $isDeveloper ? 'My Activity History' : ($isSystemAdmin ? 'All Activ
                                                     $apprBy = $changes['approved_by'] ?? '-';
                                                     $rsn = $changes['reason'] ?? '-';
                                                     $pName = $changes['project_name'] ?? $changes['project'] ?? '-';
+                                                    $pRef = $changes['project_reference_code'] ?? '';
+                                                    if ($pName !== '-' && $pRef) {
+                                                        $pName = $pName . ' (' . $pRef . ')';
+                                                    }
                                                     $cName = $changes['client_name'] ?? $changes['client'] ?? '-';
                                                     $materialBrand = $changes['material_brand'] ?? '-';
                                                 @endphp
@@ -1183,15 +1176,16 @@ $pageTitle = $isDeveloper ? 'My Activity History' : ($isSystemAdmin ? 'All Activ
                                                     <td class="px-4 py-2 text-sm text-blue-600 dark:text-blue-400">₱{{ number_format($cpu, 2) }}</td>
                                                     <td class="px-4 py-2 text-sm text-purple-600 dark:text-purple-400">₱{{ number_format($tc, 2) }}</td>
                                                     <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">{{ $reqBy }}</td>
-                                                    <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">{{ $rsn }}</td>
                                                     <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-300">
                                                         @if($cName !== '-' || $pName !== '-')
                                                             @if($cName !== '-')
-                                                                <div class="text-xs"><span class="font-semibold">Client:</span> {{ $cName }}</div>
+                                                                <div><span class="font-semibold">Client:</span> {{ $cName }}</div>
                                                             @endif
                                                             @if($pName !== '-')
-                                                                <div class="text-xs"><span class="font-semibold">Project:</span> {{ $pName }}</div>
+                                                                <div><span class="font-semibold">Project:</span> {{ $pName }}</div>
                                                             @endif
+                                                        @elseif($rsn !== '-')
+                                                            {{ $rsn }}
                                                         @else
                                                             -
                                                         @endif
@@ -1814,4 +1808,58 @@ $pageTitle = $isDeveloper ? 'My Activity History' : ($isSystemAdmin ? 'All Activ
         </div>
     @endif
 </div>
+
+<script>
+function copyToClipboard(text) {
+    // Escape single quotes to prevent JS errors
+    text = text.replace(/'/g, "\\'").replace(/"/g, '\\"');
+    
+    // Try modern clipboard API first
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+            showCopyFeedback();
+        }).catch(function() {
+            fallbackCopy(text);
+        });
+    } else {
+        fallbackCopy(text);
+    }
+}
+
+function fallbackCopy(text) {
+    // Fallback for older browsers or non-secure contexts
+    var textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    textArea.style.top = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+        document.execCommand('copy');
+        showCopyFeedback();
+    } catch (err) {
+        console.error('Fallback copy failed: ', err);
+        alert('Failed to copy. Please copy manually: ' + text);
+    }
+    document.body.removeChild(textArea);
+}
+
+function showCopyFeedback() {
+    // Show a brief visual feedback
+    var btn = event.target.closest('button');
+    if (btn) {
+        var originalText = btn.innerHTML;
+        btn.innerHTML = '✓ Copied!';
+        btn.classList.remove('bg-gray-600', 'hover:bg-gray-700');
+        btn.classList.add('bg-green-600', 'hover:bg-green-700');
+        setTimeout(function() {
+            btn.innerHTML = originalText;
+            btn.classList.add('bg-gray-600', 'hover:bg-gray-700');
+            btn.classList.remove('bg-green-600', 'hover:bg-green-700');
+        }, 2000);
+    }
+}
+</script>
 

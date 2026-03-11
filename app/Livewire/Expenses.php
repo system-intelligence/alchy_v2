@@ -117,6 +117,7 @@ class Expenses extends Component
     public $projectTargetDate = '';
     public $projectWarrantyUntil = '';
     public $projectNotes = '';
+    public $projectNoWarranty = false;
 
     // Project detail viewer
     public $showProjectDetailModal = false;
@@ -134,6 +135,7 @@ class Expenses extends Component
     public $manageProjectStartDate = '';
     public $manageProjectTargetDate = '';
     public $manageProjectWarrantyUntil = '';
+    public $manageProjectNoWarranty = false;
     public $manageInventoryOptions = [];
     public $manageRecentReleases = [];
     public $manageActiveTab = 'release';
@@ -385,6 +387,7 @@ class Expenses extends Component
             $this->projectStartDate = $project->start_date?->format('Y-m-d') ?? '';
             $this->projectTargetDate = $project->target_date?->format('Y-m-d') ?? '';
             $this->projectWarrantyUntil = $project->warranty_until?->format('Y-m-d') ?? '';
+            $this->projectNoWarranty = empty($project->warranty_until);
             $this->projectNotes = $project->notes ?? '';
         } elseif (!$this->projectClientId && $this->clients && $this->clients->count()) {
             $defaultClient = optional($this->clients->first());
@@ -420,6 +423,7 @@ class Expenses extends Component
         $this->projectTargetDate = '';
         $this->projectWarrantyUntil = '';
         $this->projectNotes = '';
+        $this->projectNoWarranty = false;
     }
 
     public function closeProjectManageModal(): void
@@ -437,6 +441,7 @@ class Expenses extends Component
         $this->manageProjectStartDate = '';
         $this->manageProjectTargetDate = '';
         $this->manageProjectWarrantyUntil = '';
+        $this->manageProjectNoWarranty = false;
         $this->manageInventoryOptions = [];
         $this->manageRecentReleases = [];
         $this->manageActiveTab = 'release';
@@ -445,6 +450,14 @@ class Expenses extends Component
         $this->editingReleaseId = null;
         $this->editReleaseCostPerUnit = 0;
         $this->resetManageReleaseForm();
+    }
+
+    public function updatedManageProjectNoWarranty($value): void
+    {
+        // Clear warranty date when no warranty is checked
+        if ($value) {
+            $this->manageProjectWarrantyUntil = '';
+        }
     }
 
     protected function resetManageReleaseForm(): void
@@ -728,6 +741,7 @@ class Expenses extends Component
             'name' => $project->name,
             'reference_code' => $project->reference_code,
             'status' => $project->status,
+            'job_type' => $project->job_type,
             'client' => [
                 'id' => $project->client->id,
                 'name' => $project->client->name,
@@ -748,6 +762,7 @@ class Expenses extends Component
         $this->manageProjectStartDate = $project->start_date?->format('Y-m-d') ?? '';
         $this->manageProjectTargetDate = $project->target_date?->format('Y-m-d') ?? '';
         $this->manageProjectWarrantyUntil = $project->warranty_until?->format('Y-m-d') ?? '';
+            $this->manageProjectNoWarranty = empty($project->warranty_until);
         $this->manageExpenseNotesSupported = $this->expenseNotesEnabled();
 
         // Get inventory items filtered by client/project usage and availability
@@ -1295,7 +1310,7 @@ class Expenses extends Component
             'status' => $this->manageProjectStatus,
             'start_date' => $this->manageProjectStartDate ?: null,
             'target_date' => $this->manageProjectTargetDate ?: null,
-            'warranty_until' => $this->manageProjectWarrantyUntil ?: null,
+            'warranty_until' => $this->manageProjectNoWarranty ? null : ($this->manageProjectWarrantyUntil ?: null),
             'notes' => $this->manageProjectNotesInput ?: null,
         ];
 
@@ -1323,7 +1338,12 @@ class Expenses extends Component
             'model' => 'project',
             'model_id' => $project->id,
             'old_values' => $oldValues,
-            'changes' => $changes, // Only actual changes
+            'changes' => array_map(function($value) {
+                if ($value === null) {
+                    return 'No warranty needed';
+                }
+                return $value;
+            }, $changes),
         ]);
 
         $this->hydrateManageProject($project->id, preserveTab: true);
@@ -1344,6 +1364,15 @@ class Expenses extends Component
         foreach ($changes as $field => $newValue) {
             $oldValue = $oldValues[$field] ?? 'N/A';
             $fieldName = ucwords(str_replace('_', ' ', $field));
+            
+            // Format warranty display
+            if ($field === 'warranty_until' && $newValue === null) {
+                $newValue = 'No warranty needed';
+            }
+            if ($field === 'warranty_until' && $oldValue === null) {
+                $oldValue = 'No warranty needed';
+            }
+            
             $changesDetails[] = "{$fieldName}: {$oldValue} → {$newValue}";
         }
         $changesText = implode(', ', $changesDetails);
@@ -1618,6 +1647,23 @@ class Expenses extends Component
         $this->calendarEvents = $events->toArray();
     }
 
+    public function updatedProjectJobType(): void
+    {
+        // Auto-check no warranty when delivery is selected
+        if ($this->projectJobType === 'delivery') {
+            $this->projectNoWarranty = true;
+            $this->projectWarrantyUntil = '';
+        }
+    }
+
+    public function updatedProjectNoWarranty($value): void
+    {
+        // Clear warranty date when no warranty is checked
+        if ($value) {
+            $this->projectWarrantyUntil = '';
+        }
+    }
+
     public function saveProject(): void
     {
         $this->ensureAdmin();
@@ -1631,7 +1677,7 @@ class Expenses extends Component
             'projectClientId' => 'required|exists:clients,id',
             'projectName' => 'required|string|max:255',
             'projectReference' => 'required|string|max:100',
-            'projectJobType' => 'required|in:installation,service',
+            'projectJobType' => 'required|in:' . implode(',', Project::JOB_TYPES),
             'projectStatus' => 'required|in:' . implode(',', Project::STATUSES),
             'projectStartDate' => 'nullable|date',
             'projectTargetDate' => 'nullable|date|after_or_equal:projectStartDate',
@@ -1647,7 +1693,7 @@ class Expenses extends Component
             'status' => $validated['projectStatus'],
             'start_date' => $this->projectStartDate ?: null,
             'target_date' => $this->projectTargetDate ?: null,
-            'warranty_until' => $this->projectWarrantyUntil ?: null,
+            'warranty_until' => ($this->projectNoWarranty || $this->projectJobType === 'delivery') ? null : ($this->projectWarrantyUntil ?: null),
             'notes' => $this->projectNotes ?: null,
         ];
 
@@ -1698,6 +1744,15 @@ class Expenses extends Component
             foreach ($changes as $field => $newValue) {
                 $oldValue = $oldValues[$field] ?? 'N/A';
                 $fieldName = ucwords(str_replace('_', ' ', $field));
+                
+                // Format warranty display
+                if ($field === 'warranty_until' && $newValue === null) {
+                    $newValue = 'No warranty needed';
+                }
+                if ($field === 'warranty_until' && $oldValue === null) {
+                    $oldValue = 'No warranty needed';
+                }
+                
                 $changesDetails[] = "{$fieldName}: {$oldValue} → {$newValue}";
             }
             $changesText = implode(', ', $changesDetails);
@@ -1714,7 +1769,12 @@ class Expenses extends Component
             'model' => 'project',
             'model_id' => $project->id,
             'old_values' => $this->editingProject ? $oldValues : null,
-            'changes' => $projectData,
+            'changes' => array_map(function($value) {
+                if ($value === null) {
+                    return 'No warranty needed';
+                }
+                return $value;
+            }, $projectData),
         ]);
 
         $this->loadClients();

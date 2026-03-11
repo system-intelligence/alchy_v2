@@ -354,7 +354,7 @@
             </div>
             <div class="info-row">
                 <span class="info-label">Warranty Until:</span>
-                <span class="info-value">{{ $project->warranty_until ? $project->warranty_until->format('F d, Y') : 'Not Set' }}</span>
+                <span class="info-value">{{ $project->warranty_until ? $project->warranty_until->format('F d, Y') : 'No warranty needed' }}</span>
             </div>
         </div>
 

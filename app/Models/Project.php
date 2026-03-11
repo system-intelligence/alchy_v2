@@ -96,5 +96,17 @@ class Project extends Model
     {
         return $this->warranty_until && $this->warranty_until->isFuture();
     }
+
+    /**
+     * Get the formatted warranty display text.
+     * Returns "No warranty needed" when warranty_until is null.
+     */
+    public function getWarrantyDisplayAttribute(): string
+    {
+        if (!$this->warranty_until) {
+            return 'No warranty needed';
+        }
+        return $this->warranty_until->format('M d, Y');
+    }
 }
     

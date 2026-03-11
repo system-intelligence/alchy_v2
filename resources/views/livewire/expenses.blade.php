@@ -430,6 +430,11 @@ function formatDecimalInput(input) {
                                         <span>Warranty until</span>
                                         <span>{{ $projectSummary->warranty_until->format('M d, Y') }}</span>
                                     </div>
+                                @else
+                                    <div class="flex items-center justify-between text-gray-400">
+                                        <span>Warranty</span>
+                                        <span>No warranty needed</span>
+                                    </div>
                                 @endif
                             </div>
 
@@ -578,6 +583,11 @@ function formatDecimalInput(input) {
                                                 <p class="mt-2 inline-flex items-center gap-2 text-xs text-emerald-200">
                                                     <x-heroicon-o-shield-check class="h-4 w-4" />
                                                     Warranty until {{ $projectGroup['warranty_until']->format('M d, Y') }}
+                                                </p>
+                                            @else
+                                                <p class="mt-2 inline-flex items-center gap-2 text-xs text-gray-400">
+                                                    <x-heroicon-o-shield-check class="h-4 w-4" />
+                                                    No warranty needed
                                                 </p>
                                             @endif
                                         </div>
@@ -972,6 +982,11 @@ function formatDecimalInput(input) {
                                             <x-heroicon-o-shield-check class="h-4 w-4" />
                                             Warranty until {{ $project->warranty_until->format('M d, Y') }}
                                         </p>
+                                    @else
+                                        <p class="mt-2 inline-flex items-center gap-2 text-xs text-gray-400">
+                                            <x-heroicon-o-shield-check class="h-4 w-4" />
+                                            No warranty needed
+                                        </p>
                                     @endif
                                 </div>
                                 <div class="text-right">
@@ -1347,7 +1362,26 @@ function formatDecimalInput(input) {
                                 </div>
                                 <div>
                                     <label class="mb-1.5 sm:mb-2 block text-xs sm:text-sm font-medium text-gray-300">Warranty Until</label>
-                                    <input type="date" wire:model.defer="manageProjectWarrantyUntil" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" />
+                                    @if($managingProject['job_type'] === 'delivery' || $manageProjectNoWarranty)
+                                        <div class="flex items-center gap-2 rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-400">
+                                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            <span>
+                                                @if($managingProject['job_type'] === 'delivery')
+                                                    No warranty for delivery jobs
+                                                @else
+                                                    No warranty needed
+                                                @endif
+                                            </span>
+                                        </div>
+                                    @else
+                                        <input type="date" wire:model.defer="manageProjectWarrantyUntil" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" />
+                                    @endif
+                                    <div class="mt-2 flex items-center">
+                                        <input wire:model="manageProjectNoWarranty" type="checkbox" id="manageProjectNoWarranty" class="h-4 w-4 rounded border-[#1B2537] bg-[#0d1829] text-primary-500 focus:ring-primary-500" />
+                                        <label for="manageProjectNoWarranty" class="ml-2 text-xs sm:text-sm text-gray-300">No warranty needed</label>
+                                    </div>
                                     @error('manageProjectWarrantyUntil') <span class="text-xs text-red-400">{{ $message }}</span> @enderror
                                 </div>
                             </div>
@@ -1589,7 +1623,7 @@ function formatDecimalInput(input) {
                     </div>
                     <div class="rounded-2xl border border-[#1B2537] bg-[#0d1829] p-4">
                         <p class="text-xs uppercase tracking-wide text-gray-500">Warranty until</p>
-                        <p class="mt-1 font-semibold text-white">{{ $warrantyUntil ? $warrantyUntil->format('M d, Y') : '—' }}</p>
+                        <p class="mt-1 font-semibold text-white">{{ $warrantyUntil ? $warrantyUntil->format('M d, Y') : 'No warranty needed' }}</p>
                     </div>
                 </div>
 
@@ -1724,7 +1758,26 @@ function formatDecimalInput(input) {
                         </div>
                         <div>
                             <label class="mb-2 block text-sm font-medium text-gray-300">Warranty Until</label>
-                            <input wire:model.defer="projectWarrantyUntil" type="date" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" />
+                            @if($projectJobType === 'delivery' || $projectNoWarranty)
+                                <div class="flex items-center gap-2 rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-400">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span>
+                                        @if($projectJobType === 'delivery')
+                                            No warranty for delivery jobs
+                                        @else
+                                            No warranty needed
+                                        @endif
+                                    </span>
+                                </div>
+                            @else
+                                <input wire:model.defer="projectWarrantyUntil" type="date" class="w-full rounded-lg border border-[#1B2537] bg-[#0d1829] px-3 py-2 text-sm text-gray-100 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40" />
+                            @endif
+                            <div class="mt-2 flex items-center">
+                                <input wire:model="projectNoWarranty" type="checkbox" id="projectNoWarranty" class="h-4 w-4 rounded border-[#1B2537] bg-[#0d1829] text-primary-500 focus:ring-primary-500" />
+                                <label for="projectNoWarranty" class="ml-2 text-sm text-gray-300">No warranty needed</label>
+                            </div>
                             @error('projectWarrantyUntil') <span class="text-xs text-red-400">{{ $message }}</span> @enderror
                         </div>
                         <div>

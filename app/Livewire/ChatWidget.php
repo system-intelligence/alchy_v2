@@ -569,6 +569,16 @@ class ChatWidget extends Component
 
             // Record complete Stock Movement entry
             // Use the requester's ID for consistency with approval workflow
+            // Build notes in the same format as System Admin
+            $client = \App\Models\Client::find($clientId);
+            $project = \App\Models\Project::find($projectId);
+            $notes = $client ? "Released to client: {$client->name}" : 'Released';
+            if ($project) {
+                $notes .= " - Project: {$project->name}";
+                if ($project->reference_code) {
+                    $notes .= " (" . $project->reference_code . ")";
+                }
+            }
             $stockMovement = StockMovement::create([
                 'inventory_id' => $inventory->id,
                 'user_id' => $approval->requested_by, // Use requester ID for proper tracking
@@ -579,7 +589,7 @@ class ChatWidget extends Component
                 'previous_quantity' => $oldQuantity,
                 'new_quantity' => $newQuantity,
                 'location' => $inventory->category,
-                'notes' => "Approved from chat by " . auth()->user()->name . " - " . ($approval->reason ?? 'Material release'),
+                'notes' => $notes,
                 'reference' => 'expense_' . $expense->id,
                 'date_received' => now()->toDateString(),
             ]);
@@ -599,6 +609,7 @@ class ChatWidget extends Component
                 ->first();
 
             // Prepare comprehensive history data with complete stock movement info
+            // Use the loaded client and project objects for consistency
             $historyData = [
                 // Release identification
                 'release_type' => 'approval_based_release',
@@ -609,11 +620,11 @@ class ChatWidget extends Component
                 'approval_status' => 'approved',
                 
                 // Client and Project information
-                'client' => $approval->client ?? 'N/A',
-                'client_name' => $approval->client ?? 'N/A',
-                'project' => ($approval->project && is_object($approval->project)) ? $approval->project->name . ($approval->project->reference_code ? ' (' . $approval->project->reference_code . ')' : '') : ($approval->project ?? 'N/A'),
-                'project_name' => ($approval->project && is_object($approval->project)) ? $approval->project->name . ($approval->project->reference_code ? ' (' . $approval->project->reference_code . ')' : '') : ($approval->project ?? 'N/A'),
-                'project_reference_code' => ($approval->project && is_object($approval->project)) ? ($approval->project->reference_code ?? '') : '',
+                'client' => $client ? $client->name : ($approval->client ?? 'N/A'),
+                'client_name' => $client ? $client->name : ($approval->client ?? 'N/A'),
+                'project' => $project ? $project->name . ($project->reference_code ? ' (' . $project->reference_code . ')' : '') : ($approval->project ?? 'N/A'),
+                'project_name' => $project ? $project->name : ($approval->project ?? 'N/A'),
+                'project_reference_code' => $project ? ($project->reference_code ?? '') : '',
                 
                 // Material/Inventory information
                 'material' => $inventory->material_name,

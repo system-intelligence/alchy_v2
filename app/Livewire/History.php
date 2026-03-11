@@ -302,34 +302,96 @@ class History extends Component
 
     public function openRelatedMovementsModal($approvalId)
     {
-        $approval = \App\Models\MaterialReleaseApproval::with('expense.client', 'expense.project')->find($approvalId);
+        // Load approval with all relationships
+        $approval = \App\Models\MaterialReleaseApproval::with('expense.client', 'expense.project', 'client', 'project', 'inventory', 'requester')->find($approvalId);
 
-        if (!$approval || !$approval->expense) {
+        if (!$approval) {
             return;
         }
 
-        // Get all expenses for this client/project combination
-        $query = \App\Models\Expense::query();
+        // Determine client and project from expense or directly from approval
+        $clientId = null;
+        $projectId = null;
+        $clientName = null;
+        $projectName = null;
 
-        if ($approval->expense->client_id) {
-            $query->where('client_id', $approval->expense->client_id);
+        // First try to get from expense
+        if ($approval->expense) {
+            $clientId = $approval->expense->client_id;
+            $projectId = $approval->expense->project_id;
+            $clientName = $approval->expense->client?->name;
+            $projectName = $approval->expense->project?->name;
+        } else {
+            // Try to get directly from approval
+            $clientId = $approval->client_id;
+            $projectId = $approval->project_id;
+            
+            if ($approval->client_id) {
+                $clientModel = $approval->client()->first();
+                $clientName = $clientModel ? $clientModel->name : null;
+            }
+            
+            if ($approval->project_id) {
+                $projectModel = $approval->project()->first();
+                $projectName = $projectModel ? $projectModel->name : null;
+            }
         }
 
-        if ($approval->expense->project_id) {
-            $query->where('project_id', $approval->expense->project_id);
+        // If no client found yet, try to get from history changes
+        if (empty($clientName)) {
+            $history = \App\Models\History::where('model', 'MaterialReleaseApproval')
+                ->where('model_id', $approvalId)
+                ->orderBy('created_at', 'desc')
+                ->first();
+            
+            if ($history && $history->changes) {
+                $changes = is_array($history->changes) ? $history->changes : 
+                    (is_string($history->changes) ? json_decode($history->changes, true) ?? [] : []);
+                
+                $clientName = $changes['client'] ?? $changes['client_name'] ?? null;
+                $projectName = $changes['project'] ?? $changes['project_name'] ?? null;
+            }
         }
 
-        $relatedExpenses = $query->pluck('id');
+        // Get requester name as fallback
+        $requesterName = $approval->requester ? $approval->requester->name : 'Unknown';
 
-        // Get all stock movements for these expenses
-        $movements = \App\Models\StockMovement::whereIn('reference', $relatedExpenses->map(fn($id) => 'expense_' . $id))
-            ->with(['inventory', 'user'])
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $movements = collect();
+
+        // If we have expense, get movements by expense
+        if ($approval->expense) {
+            $relatedExpenses = \App\Models\Expense::where('client_id', $clientId)
+                ->where('project_id', $projectId)
+                ->pluck('id');
+
+            $movements = \App\Models\StockMovement::whereIn('reference', $relatedExpenses->map(fn($id) => 'expense_' . $id))
+                ->with(['inventory', 'user'])
+                ->orderBy('created_at', 'desc')
+                ->get();
+        }
+
+        // If no movements found, try to get by approval reference
+        if ($movements->isEmpty()) {
+            $movements = \App\Models\StockMovement::where('reference', 'approval_' . $approval->id)
+                ->with(['inventory', 'user'])
+                ->orderBy('created_at', 'desc')
+                ->get();
+        }
+
+        // If still no movements, get by inventory and requester
+        if ($movements->isEmpty() && $approval->inventory) {
+            $movements = \App\Models\StockMovement::where('inventory_id', $approval->inventory_id)
+                ->where('user_id', $approval->requested_by)
+                ->where('movement_type', 'outbound')
+                ->with(['inventory', 'user'])
+                ->orderBy('created_at', 'desc')
+                ->limit(20)
+                ->get();
+        }
 
         $this->relatedMovements = [
-            'client_name' => $approval->expense->client?->name ?? 'N/A',
-            'project_name' => $approval->expense->project?->name ?? null,
+            'client_name' => $clientName ?? $requesterName,
+            'project_name' => $projectName,
             'movements' => $movements
         ];
 
